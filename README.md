@@ -5,8 +5,6 @@
 > API for translating audio to text using Whisper model.
 
 # 🛠️ 安装
-
-## 选项1：使用 uv（推荐）
 ```bash
 # 克隆 GitHub 仓库
 git clone https://github.com/sndraw/bookroom-audio.git
@@ -17,8 +15,7 @@ cd bookroom-audio
 # 如果你还没有安装 uv，请先安装（可能需要需要设置uv到系统环境变量）
 pip install uv
 
-# 创建虚拟环境并安装依赖
-# 我们支持使用 Python 3.10、3.11、3.12
+# 创建虚拟环境并安装依赖，支持 Python 3.10、3.11、3.12
 uv venv .venv --python=3.10
 
 # 激活虚拟环境
@@ -67,7 +64,6 @@ docker login -u username <IP:port>/<repository>
 ```bash
 make build-push-all REGISTRY_URL=<IP:port>/<repository> IMAGE_NAME=sndraw/bookroom-audio IMAGE_VERISON=0.0.1
 
-#gpu版本（cuda）
+# GPU版本（cuda）
 make gpu-build-push-all REGISTRY_URL=<IP:port>/<repository> IMAGE_NAME=sndraw/bookroom-audio IMAGE_VERISON=0.0.1
 ```
-
