@@ -1,4 +1,9 @@
 
+# BookRoom Audio
+> 本地语音识别API
+>
+> API for translating audio to text using Whisper model.
+
 # 🛠️ 安装
 
 ## 选项1：使用 uv（推荐）
