@@ -11,6 +11,16 @@ from bookroom_audio.api import __api_name__
 logger = logging.getLogger(__api_name__)
 
 
+def get_cors_origins():
+    """Get allowed origins from environment variable
+    Returns a list of allowed origins, defaults to ["*"] if not set
+    """
+    origins_str = os.getenv("CORS_ORIGINS", "*")
+    if origins_str == "*":
+        return ["*"]
+    return [origin.strip() for origin in origins_str.split(",")]
+
+
 def parse_args():
     parser = argparse.ArgumentParser(
         description="Transcribe audio using Whisper model."
@@ -132,9 +142,20 @@ def get_api_key_dependency(api_key: Optional[str]):
 
 
 def parse_keep_alive(keep_alive):
-    if "m" in keep_alive:
-        return int(keep_alive[:-1]) * 60
-    elif "h" in keep_alive:
-        return int(keep_alive[:-1]) * 3600
-    else:
-        raise ValueError("Invalid format for keep_alive. Expected '5m' or '5h'.")
+    # 如果是负数,则返回None
+    if keep_alive is None or int(keep_alive)  < 0:
+        return -1
+    # 如果是字符串,则解析为秒数,支持m,s,h格式
+    if isinstance(keep_alive, str):
+        if keep_alive.isdigit():
+            return int(keep_alive)
+        elif "m" in keep_alive:
+            return int(keep_alive[:-1]) * 60
+        elif "h" in keep_alive:
+            return int(keep_alive[:-1]) * 3600
+        elif "s" in keep_alive:
+            return int(keep_alive[:-1])
+        else:
+            raise ValueError("Invalid keep_alive format")
+    # 否则默认为5分钟（300秒）
+    return 5 * 60

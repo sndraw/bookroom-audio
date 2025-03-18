@@ -1,6 +1,6 @@
 
 # Build stage
-FROM python:3.11-slim AS builder
+FROM nvidia/cuda:12.8.1-cudnn-devel-ubuntu20.04 AS builder
 
 WORKDIR /app
 
@@ -12,9 +12,11 @@ COPY ./uv.lock ./uv.lock
 
 # Install dependencies
 RUN pip install uv
-RUN uv sync
+RUN uv venv .venv --python=3.10
+RUN . .venv/bin/activate
+RUN uv pip install -e .
 
-COPY ./bookroom_audio /app/bookroom_audio
+COPY ./bookroom_audio ./bookroom_audio
 COPY ./docker/entrypoint.sh /entrypoint.sh
 
 # Expose the default port
