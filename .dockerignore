@@ -23,6 +23,7 @@ build/
 *.yml
 .dockerignore
 Dockerfile
+Dockerfile.*
 Makefile
 
 # Exclude other projects
