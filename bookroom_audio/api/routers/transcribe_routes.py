@@ -101,7 +101,7 @@ def create_transcribe_routes(args: Any, api_key: Optional[str] = None):
         """
         try:
             params = dict(
-                file=file,
+                audio=file,
                 model_size_or_path=model or args.model,
                 language=language or args.language,
                 task="transcribe",

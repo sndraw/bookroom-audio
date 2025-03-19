@@ -31,7 +31,7 @@ def print_model_loading(args: Any, params: dict):
     ASCIIColors.white("    ├─ download_root: ", end="")
     ASCIIColors.yellow(f"{args.download_root}")
     ASCIIColors.white("    ├─ local_files_only: ", end="")
-    ASCIIColors.yellow(f"{args.download_root}")
+    ASCIIColors.yellow(f"{args.local_files_only}")
     
 def print_transcribing_audio(params: dict):
     ASCIIColors.blue("\nTranscribing audio...\n")
