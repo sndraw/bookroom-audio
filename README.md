@@ -75,7 +75,7 @@ COMPUTE_TYPE=int8 # 计算类型，默认为 int8, 支持 int8, int4, bfloat16 �
 MODEL_KEEP_ALIVE=5m # 模型保持时间，默认为5分钟，如果为-1则为无限期保持
 NUM_WORKERS=1 # 工作线程数，默认为1个
 DOWNLOAD_ROOT=./cache # 下载模型等文件的缓存路径
-
+LOCAL_FILES_ONLY=true # 是否只使用本地文件，不从网络下载，默认为true
 ```
 ### **启动服务**
 ```bash
