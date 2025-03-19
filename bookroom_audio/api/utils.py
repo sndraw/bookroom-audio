@@ -39,7 +39,7 @@ def parse_args():
         help="Size or path of the Whisper model to use (default: medium).",
     )
     parser.add_argument(
-        "--local_files_only",
+        "--local-files-only",
         type=str,
         default=os.getenv("LOCAL_FILES_ONLY", True),
         help="Whether to only allow local files (default: True).",
