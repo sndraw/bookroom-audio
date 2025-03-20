@@ -66,7 +66,7 @@ def create_transcribe_routes(args: Any, api_key: Optional[str] = None):
                 "error": "Request cancelled"
             }, 499  # 使用499状态码表示客户端中止请求
         except Exception as e:
-            logger.error(f"Error during transcriptions: {e}")
+            logger.error(f"Error during translations: {e}")
             raise HTTPException(status_code=500, detail=str(e))
 
     @router.post(
