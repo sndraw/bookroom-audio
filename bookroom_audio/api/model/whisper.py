@@ -59,7 +59,7 @@ async def load_model_task(args: Any, params: dict):
             compute_type=args.compute_type,
             num_workers=args.num_workers,
             download_root=args.download_root,
-            local_files_only=args.local_files_only,
+            local_files_only=bool(args.local_files_only),
         )
         ASCIIColors.green("\nModel has been loaded\n")
 

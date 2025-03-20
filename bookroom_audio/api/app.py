@@ -1,13 +1,13 @@
 import asyncio
 from contextlib import asynccontextmanager
 import os
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException, Request, Response
 from dotenv import load_dotenv, find_dotenv
 from fastapi.middleware.cors import CORSMiddleware
 from ascii_colors import ASCIIColors
+from fastapi.responses import JSONResponse
 from bookroom_audio.api.model.whisper import (
     cleanup_model,
-    load_model_task,
     run_model_loaded_process,
 )
 from bookroom_audio.api.routers.server_routes import create_server_routes
@@ -71,13 +71,42 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+if args.debug:
+    app.debug = True
+
 api_key = args.key
+
+
+# 自定义错误处理程序
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request: Request, exc: HTTPException):
+    headers = {}
+    if exc.headers is not None:
+        headers = {**exc.headers}
+    return JSONResponse(
+        status_code=exc.status_code,
+        headers={
+            **headers,
+        },
+        content={
+            "error": {
+                "code": None,
+                "message": exc.detail,
+                "pram": None,
+                "type": "server_error",
+            }
+        },
+    )
+
 
 app.include_router(create_transcribe_routes(args, api_key))
 app.include_router(create_server_routes(args, api_key))
 
+
 def main():
     import uvicorn
+    if app.debug:
+        ASCIIColors.yellow("\nServer is running in debug mode! \n")
 
     uvicorn.run(
         "bookroom_audio.api.app:app",

@@ -9,6 +9,15 @@ from starlette.status import HTTP_403_FORBIDDEN
 from bookroom_audio.api import __api_name__
 
 logger = logging.getLogger(__api_name__)
+# 创建一个 StreamHandler 将日志输出到控制台
+stream_handler = logging.StreamHandler()
+stream_handler.setLevel(logging.DEBUG)
+
+# 创建一个格式化器并将其添加到处理器中
+formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+stream_handler.setFormatter(formatter)
+# 将处理器添加到 logger 中
+logger.addHandler(stream_handler)
 
 
 def get_cors_origins():
@@ -25,6 +34,7 @@ def parse_args():
     parser = argparse.ArgumentParser(
         description="Transcribe audio using Whisper model."
     )
+
     parser.add_argument(
         "--key",
         type=str,
@@ -38,10 +48,18 @@ def parse_args():
         default=os.getenv("MODEL", "medium"),
         help="Size or path of the Whisper model to use (default: medium).",
     )
+
+    parser.add_argument(
+        "--language",
+        type=str,
+        default=os.getenv("LANGUAGE", "en"),
+        help="Size or path of the Whisper model to use (default: en).",
+    )
     parser.add_argument(
         "--local-files-only",
-        type=str,
-        default=os.getenv("LOCAL_FILES_ONLY", True),
+        type=lambda x: x.lower() == "true",
+        choices=["true", "false"],
+        default=str(os.getenv("LOCAL_FILES_ONLY", "True")).lower(),
         help="Whether to only allow local files (default: True).",
     )
     parser.add_argument(
@@ -75,21 +93,28 @@ def parse_args():
         help="Download workders for the model (default: ./.cache).",
     )
     parser.add_argument(
+        "--debug",
+        type=lambda x: x.lower() == "true",
+        choices=["true", "false"],
+        default=str(os.getenv("SERVER_DEBUG", "False")).lower(),
+        help="Enable debug mode. Default is False.",
+    )
+    parser.add_argument(
         "--host",
         type=str,
-        default="0.0.0.0",
+        default=os.getenv("SERVER_HOST", "0.0.0.0"),
         help="Host to run the server on (default: 0.0.0.0).",
     )
     parser.add_argument(
         "--port",
         type=int,
-        default=15231,
+        default=os.getenv("SERVER_PORT", 15231),
         help="Port to run the server on (default: 15231).",
     )
     parser.add_argument(
         "--workers",
         type=int,
-        default=2,
+        default=os.getenv("SERVER_WORKERS", 1),
         help="Number of workers to use for transcription (default:1).",
     )
     parser.add_argument(
@@ -149,7 +174,7 @@ def get_api_key_dependency(api_key: Optional[str]):
 
 def parse_keep_alive(keep_alive):
     # 如果是负数,则返回None
-    if keep_alive is None or int(keep_alive)  < 0:
+    if keep_alive is None or int(keep_alive) < 0:
         return -1
     # 如果是字符串,则解析为秒数,支持m,s,h格式
     if isinstance(keep_alive, str):
