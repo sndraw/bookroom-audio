@@ -104,7 +104,7 @@ make build-push-all REGISTRY_URL=<IP:port>/<repository> IMAGE_NAME=sndraw/bookro
 ## 截图展示
 ### 接口配置
 ![接口配置](./docs/assets/接口配置.png)  
-### 语音设置
-![模型配置](./docs/assets/语音设置.png)  
+### 模型设置
+![模型配置](./docs/assets/模型设置.png)  
 ### 语音识别
 ![语音识别](./docs/assets/语音识别.png)  
