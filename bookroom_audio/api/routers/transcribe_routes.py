@@ -7,8 +7,8 @@ from typing import Any, Optional
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from pydantic import BaseModel
 
-from bookroom_audio.api.model.whisper import ModelQueryResponse, load_model_task
-from bookroom_audio.api.utils import (
+from bookroom_audio.models.whisper import ModelQueryResponse, load_model_task
+from bookroom_audio.utils.utils_api import (
     get_api_key_dependency,
     logger,
 )
@@ -18,13 +18,11 @@ router = APIRouter(prefix="/v1/audio", tags=["transcribe"])
 
 
 def create_transcribe_routes(args: Any, api_key: Optional[str] = None):
-    """Create transcribe routes."""
-    router = APIRouter()
     # Create the optional API key dependency
     optional_api_key = get_api_key_dependency(api_key)
 
     @router.post(
-        "/v1/audio/translations",
+        "/translations",
         response_model=ModelQueryResponse,
         dependencies=[Depends(optional_api_key)],
     )
@@ -70,7 +68,7 @@ def create_transcribe_routes(args: Any, api_key: Optional[str] = None):
             raise HTTPException(status_code=500, detail=str(e))
 
     @router.post(
-        "/v1/audio/transcriptions",
+        "/transcriptions",
         response_model=ModelQueryResponse,
         dependencies=[Depends(optional_api_key)],
     )

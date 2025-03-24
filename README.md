@@ -65,7 +65,9 @@ deactivate
 
 ## 🚀 启动
 ### **设置环境变量**
-在项目根目录下创建一个 `.env` 文件，并添加以下内容：
+在项目根目录下复制``.env.example并重命名为 .env，并根据需要修改环境变量。
+
+例如：
    
 ```bash
 API_KEY=your_api_key_here # 你的 API 密钥，如果没有可以不填
@@ -80,11 +82,10 @@ LOCAL_FILES_ONLY=true # 是否只使用本地文件，不从网络下载，默�
 ### **启动服务**
 ```bash
 # 正常运行模式
-uv run -m bookroom_audio.api.app
+uv run -m bookroom_audio.server
 
 # 开启调试模式，代码修改后自动重启服务
-uv run -m bookroom_audio.api.app --reload
-
+uv run -m bookroom_audio.server --reload
 ```
 
 

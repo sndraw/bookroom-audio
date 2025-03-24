@@ -7,7 +7,7 @@ from typing import Any, Optional
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 
-from bookroom_audio.api.utils import get_api_key_dependency
+from bookroom_audio.utils.utils_api import get_api_key_dependency
 
 
 router = APIRouter(tags=["server"])
@@ -21,8 +21,6 @@ class ServerResponse(BaseModel):
 
 
 def create_server_routes(args: Any, api_key: Optional[str] = None):
-    """Create server routes."""
-    router = APIRouter()
     # Create the optional API key dependency
     optional_api_key = get_api_key_dependency(api_key)
 
