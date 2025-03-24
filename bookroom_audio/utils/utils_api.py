@@ -39,7 +39,7 @@ def parse_args():
         "--key",
         type=str,
         default=os.getenv("API_KEY", None),
-        help="API key for authentication. This protects lightrag server against unauthorized access",
+        help="API key for authentication. This protects server against unauthorized access",
     )
 
     parser.add_argument(
@@ -110,6 +110,23 @@ def parse_args():
         type=int,
         default=os.getenv("SERVER_PORT", 15231),
         help="Port to run the server on (default: 15231).",
+    )
+    parser.add_argument(
+        "--ssl",
+        type=lambda x: x.lower() == "true",
+        choices=["true", "false"],
+        default=str(os.getenv("SERVER_SSL", "False")).lower(),
+        help="Enable SSL. Default is False.",
+    )
+    parser.add_argument(
+        "--ssl-certfile",
+        default=os.getenv("SSL_CERTFILE", None),
+        help="Path to SSL certificate file (required if --ssl is enabled)",
+    )
+    parser.add_argument(
+        "--ssl-keyfile",
+        default=os.getenv("SSL_KEYFILE", None),
+        help="Path to SSL private key file (required if --ssl is enabled)",
     )
     parser.add_argument(
         "--workers",

@@ -5,7 +5,7 @@ from ascii_colors import ASCIIColors
 from faster_whisper import WhisperModel
 from faster_whisper.transcribe import Segment
 
-from bookroom_audio.api.utils import (
+from bookroom_audio.utils.utils_api import (
     logger,
     parse_keep_alive,
 )

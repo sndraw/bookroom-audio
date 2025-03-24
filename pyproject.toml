@@ -1,11 +1,11 @@
 [project]
 name = "bookroom-audio"
-version = "0.1.0"
-description = "Add your description here"
+version = "0.0.5"
+description = "API for translating audio to text using a speech recognition model."
 readme = "README.md"
 requires-python = ">=3.10"
 authors = [
-    { name = "sndraw", email = "sndraw@github.com" },
+    { name = "sndraw" },
 ]
 
 dependencies = [

@@ -6,4 +6,4 @@ cd /app
 source .venv/bin/activate
 
 # 运行应用
-uv run -m bookroom_audio.api.app 
+uv run -m bookroom_audio.server 
