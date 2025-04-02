@@ -62,15 +62,28 @@ uv pip install torch torchvision torchaudio --index-url https://download.pytorch
 # 完成后退出虚拟环境
 deactivate
 ```
+## 📚 模型下载（本地模式）
+### **国内模型仓库下载**
+```bash
+# Make sure git-lfs is installed (https://git-lfs.com)
+git lfs install
+
+git clone https://hf-mirror.com/guillaumekln/faster-whisper-large-medium
+```
+### **国际模型仓库下载**
+```bash
+# Make sure git-lfs is installed (https://git-lfs.com)
+git lfs install
+git clone https://huggingface.co/Systran/faster-whisper-medium
+```
 
 ## 🚀 启动
 ### **设置环境变量**
 在项目根目录下复制``.env.example并重命名为 .env，并根据需要修改环境变量。
-
-例如：
    
 ```bash
 API_KEY=your_api_key_here # 你的 API 密钥，如果没有可以不填
+# MODEL=本地下载模型绝对路径 # 如果仅使用本地下载模型，请填写本地绝对路径覆盖默认值
 MODEL=medium # 模型大小，可选：medium, large, xlarge 等，默认为 medium
 DEVICE=cpu # 设备支持：可选，默认为 cpu, 支持cpu、cuda、auto
 COMPUTE_TYPE=int8 # 计算类型，默认为 int8, 支持 int8, int4, bfloat16 等
@@ -79,6 +92,8 @@ NUM_WORKERS=1 # 工作线程数，默认为1个
 DOWNLOAD_ROOT=./cache # 下载模型等文件的缓存路径
 LOCAL_FILES_ONLY=true # 是否只使用本地文件，不从网络下载，默认为true
 ```
+
+
 ### **启动服务**
 ```bash
 # 正常运行模式

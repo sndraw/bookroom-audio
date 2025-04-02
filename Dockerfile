@@ -17,7 +17,6 @@ RUN . .venv/bin/activate
 RUN uv pip install -e .
 
 COPY ./bookroom_audio ./
-COPY ./docs ./
 COPY ./docker/entrypoint.sh /entrypoint.sh
 
 # Expose the default port
