@@ -68,7 +68,7 @@ deactivate
 # Make sure git-lfs is installed (https://git-lfs.com)
 git lfs install
 
-git clone https://hf-mirror.com/guillaumekln/faster-whisper-large-medium
+git clone https://hf-mirror.com/guillaumekln/faster-whisper-medium
 ```
 ### **国际模型仓库下载**
 ```bash
