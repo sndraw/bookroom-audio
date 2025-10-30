@@ -1,7 +1,7 @@
 # 定义变量
 IMAGE_NAME ?= sndraw/bookroom-audio
 CONTAINER_NAME ?= bookroom-audio
-IMAGE_VERISON ?= $(shell git rev-parse --short HEAD)
+IMAGE_VERSION ?= $(shell git rev-parse --short HEAD)
 REGISTRY_URL ?= docker.io
 PLATFORMS ?= linux/amd64,linux/arm64
 
@@ -13,26 +13,26 @@ check_error = \
 .PHONY: build-push-all
 
 build-image:
-	@echo "Building web Docker image: $(IMAGE_NAME):$(IMAGE_VERISON)..."
-	docker buildx build --platform $(PLATFORMS) -t $(IMAGE_NAME):$(IMAGE_VERISON) ./ || $(call check_error,"build-image")
-	@echo "Web Docker image built successfully: $(IMAGE_NAME):$(IMAGE_VERISON)"
+	@echo "Building web Docker image: $(IMAGE_NAME):$(IMAGE_VERSION)..."
+	docker buildx build --platform $(PLATFORMS) -t $(IMAGE_NAME):$(IMAGE_VERSION) ./ || $(call check_error,"build-image")
+	@echo "Web Docker image built successfully: $(IMAGE_NAME):$(IMAGE_VERSION)"
 
 tag-image: 
-	@echo "Taging web Docker image: $(IMAGE_NAME):$(IMAGE_VERISON)..."
-	docker tag $(IMAGE_NAME):$(IMAGE_VERISON) $(REGISTRY_URL)/$(IMAGE_NAME):$(IMAGE_VERISON) || $(call check_error,"tag-image")
-	@echo "Web Docker image tag successfully: $(IMAGE_NAME):$(IMAGE_VERISON)"
+	@echo "Taging web Docker image: $(IMAGE_NAME):$(IMAGE_VERSION)..."
+	docker tag $(IMAGE_NAME):$(IMAGE_VERSION) $(REGISTRY_URL)/$(IMAGE_NAME):$(IMAGE_VERSION) || $(call check_error,"tag-image")
+	@echo "Web Docker image tag successfully: $(IMAGE_NAME):$(IMAGE_VERSION)"
 
 push-image: 
-	@echo "Pushing web Docker image: $(IMAGE_NAME):$(IMAGE_VERISON)..."
-	docker push $(REGISTRY_URL)/$(IMAGE_NAME):$(IMAGE_VERISON) || $(call check_error,"push-image")
-	@echo "Web Docker image push successfully: $(IMAGE_NAME):$(IMAGE_VERISON)"
+	@echo "Pushing web Docker image: $(IMAGE_NAME):$(IMAGE_VERSION)..."
+	docker push $(REGISTRY_URL)/$(IMAGE_NAME):$(IMAGE_VERSION) || $(call check_error,"push-image")
+	@echo "Web Docker image push successfully: $(IMAGE_NAME):$(IMAGE_VERSION)"
 
 run-image:
 	# 检查并停止已存在的容器
 	docker stop $(CONTAINER_NAME) > /dev/null 2>&1 || true
 	docker rm $(CONTAINER_NAME) > /dev/null 2>&1 || true
 	@echo "Running web Docker container: $(CONTAINER_NAME)..."
-	docker run -d --name $(CONTAINER_NAME) -p 8080:80 $(IMAGE_NAME):$(IMAGE_VERISON) || $(call check_error,"run-image")
+	docker run -d --name $(CONTAINER_NAME) -p 8080:80 $(IMAGE_NAME):$(IMAGE_VERSION) || $(call check_error,"run-image")
 	@echo "Web Docker container running successfully: $(CONTAINER_NAME)"
 
 # 停止并清理Docker容器和镜像
@@ -40,7 +40,7 @@ clean-image:
 	@echo "Cleaning web Docker container and image..."
 	docker stop $(CONTAINER_NAME) > /dev/null 2>&1 || true
 	docker rm $(CONTAINER_NAME) > /dev/null 2>&1 || true
-	docker rmi -f $(IMAGE_NAME):$(IMAGE_VERISON) $(REGISTRY_URL)/$(IMAGE_NAME):$(IMAGE_VERISON) > /dev/null 2>&1 || true
+	docker rmi -f $(IMAGE_NAME):$(IMAGE_VERSION) $(REGISTRY_URL)/$(IMAGE_NAME):$(IMAGE_VERSION) > /dev/null 2>&1 || true
 	# 清理未被任何容器引用的镜像
 	docker image prune -f -a > /dev/null 2>&1 || true
 	@echo "Web Docker container and image cleaned successfully."

@@ -53,11 +53,12 @@ source .venv/bin/activate
 ## Windows
 .venv\Scripts\activate
 
+# 如果需要支持cuda，请参照Nvidia官网说明安装CUDA、cuDNN，并根据所安装版本替换并进行torch等依赖库安装
+uv add torch torchvision torchaudio --default-index https://pypi.org/simple --index https://download.pytorch.org/whl/cu126
+
+
 # 安装所有依赖
 uv pip install -e .
-
-# 如果需要支持cuda，请参照Nvidia官网说明安装CUDA、cuDNN，并根据所安装版本替换并进行torch等依赖库安装
-uv pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu126
 
 # 完成后退出虚拟环境
 deactivate
@@ -114,7 +115,7 @@ docker login -u username <IP:port>/<repository>
 #### make命令（参数可选）
 注：Makefile中定义了build-push-all目标，可以一次性构建并推送镜像
 ```bash
-make build-push-all REGISTRY_URL=<IP:port>/<repository> IMAGE_NAME=sndraw/bookroom-audio IMAGE_VERISON=0.0.1
+make build-push-all REGISTRY_URL=<IP:port>/<repository> IMAGE_NAME=sndraw/bookroom-audio IMAGE_VERSION=0.0.1
 ```
 
 ## 截图展示

@@ -190,20 +190,24 @@ def get_api_key_dependency(api_key: Optional[str]):
 
 
 def parse_keep_alive(keep_alive):
-    # 如果是负数,则返回None
-    if keep_alive is None or int(keep_alive) < 0:
+    if keep_alive is None or keep_alive == "":
         return -1
-    # 如果是字符串,则解析为秒数,支持m,s,h格式
-    if isinstance(keep_alive, str):
-        if keep_alive.isdigit():
-            return int(keep_alive)
-        elif "m" in keep_alive:
-            return int(keep_alive[:-1]) * 60
-        elif "h" in keep_alive:
-            return int(keep_alive[:-1]) * 3600
-        elif "s" in keep_alive:
-            return int(keep_alive[:-1])
+    
+    try:
+        # 尝试将字符串转换为整数
+        return int(keep_alive) * 60  # 假设单位是分钟，转换为秒
+    
+    except ValueError:
+        # 如果失败，检查是否包含时间单位（如 'm'）
+        if isinstance(keep_alive, str) and keep_alive[-1] in ['s', 'm', 'h']:
+            value = int(keep_alive[:-1])
+            unit = keep_alive[-1]
+            
+            if unit == 's':
+                return value
+            elif unit == 'm':
+                return value * 60
+            elif unit == 'h':
+                return value * 3600
         else:
-            raise ValueError("Invalid keep_alive format")
-    # 否则默认为5分钟（300秒）
-    return 5 * 60
+            raise ValueError(f"Invalid keep_alive value: {keep_alive}")
