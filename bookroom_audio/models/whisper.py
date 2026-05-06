@@ -15,7 +15,33 @@ model_last_loaded = None
 
 ModelQueryResponse = Iterable[Segment]
 
-
+# --- 语言代码标准化函数 ---
+def normalize_language_code(language: str | None) -> str | None:
+    """
+    将常见的语言代码转换为 Whisper/faster-whisper 支持的两位代码。
+    例如: 'zh-CN' -> 'zh', 'en-US' -> 'en', 'yue' -> 'yue'
+    """
+    if not language:
+        return None
+    
+    # 转为小写
+    lang = language.lower().strip()
+    
+    # 如果已经是两位代码，直接返回（假设输入合法）
+    if len(lang) == 2:
+        return lang
+        
+    # 处理带横杠的代码 (如 zh-CN, en-US)
+    if '-' in lang:
+        lang = lang.split('-')[0]
+        
+    # 特殊处理：有些三位代码可能需要映射，但 whisper 主要支持两位。
+    # yue (粤语) 是三位但在 whitelist 中，需保留
+    if lang == 'yue':
+        return 'yue'
+        
+    # 默认取前两位
+    return lang[:2]
 def print_model_loading(args: Any, params: dict):
     ASCIIColors.blue("\nModel is being loaded...\n")
     ASCIIColors.white("    ├─ model_size_or_path: ", end="")
@@ -62,9 +88,20 @@ async def load_model_task(args: Any, params: dict):
             local_files_only=bool(args.local_files_only),
         )
         ASCIIColors.green("\nModel has been loaded\n")
+    
+
+    # --- 在此处标准化语言代码 ---
+    original_language = params.get("language")
+    normalized_language = normalize_language_code(original_language)
+    
+    # 如果标准化后的语言与原始不同，可以打印日志方便调试（可选）
+    if original_language and original_language != normalized_language:
+        ASCIIColors.yellow(f"Language code converted: '{original_language}' -> '{normalized_language}'")
 
     result, _ = model_client.transcribe(
-        audio=params.get("audio"), task=params.get("task"), language=params.get("language"),
+        audio=params.get("audio"), 
+        task=params.get("task"), 
+        language=normalized_language, # 使用标准化后的语言代码
     )
     model_last_loaded = datetime.now()
     return result
