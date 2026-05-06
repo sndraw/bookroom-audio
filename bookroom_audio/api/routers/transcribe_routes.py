@@ -87,6 +87,7 @@ def create_transcribe_routes(args: Any, api_key: Optional[str] = None):
         "/transcriptions",
         response_model=ModelQueryResponse,
         dependencies=[Depends(optional_api_key)],
+        operation_id="transcribe_audio",
     )
     async def transcribe_audio(
         file: Optional[Any] = Form(None),
