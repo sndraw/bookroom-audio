@@ -44,8 +44,8 @@ cd bookroom-audio
 # 如果你还没有安装 uv，请先安装（可能需要需要设置uv到系统环境变量）
 pip install uv
 
-# 创建虚拟环境并安装依赖，支持 Python 3.10
-uv venv .venv --python=3.10
+# 创建虚拟环境并安装依赖，支持 Python 3.11
+uv venv .venv --python=3.11
 
 # 激活虚拟环境
 ## macOS/Linux

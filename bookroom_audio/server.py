@@ -14,6 +14,7 @@ from bookroom_audio.models.whisper import (
 )
 from bookroom_audio.api.routers.server_routes import create_server_routes
 from bookroom_audio.api.routers.transcribe_routes import create_transcribe_routes
+from bookroom_audio.api.routers.tts_routes import create_tts_routes
 from bookroom_audio.utils.utils_api import (
     get_cors_origins,
     parse_args,
@@ -115,6 +116,7 @@ def create_app(args) -> FastAPI:
 
     app.include_router(create_transcribe_routes(args, api_key))
     app.include_router(create_server_routes(args, api_key))
+    app.include_router(create_tts_routes(args, api_key))
     return app
 
 args = parse_args()
