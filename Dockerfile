@@ -5,7 +5,13 @@ FROM nvidia/cuda:12.8.1-cudnn-devel-ubuntu20.04 AS builder
 WORKDIR /app
 
 # Install dependencies
-RUN apt-get update && apt-get install -y python3-pip
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+    python3-pip \
+    espeak-ng && \
+    rm -rf /var/lib/apt/lists/*
+    
+RUN pip install --upgrade pip
 
 COPY ./pyproject.toml ./pyproject.toml
 COPY ./uv.lock ./uv.lock
