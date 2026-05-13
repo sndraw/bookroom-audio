@@ -25,7 +25,6 @@ from bookroom_audio.api import __api_name__, __api_description__, __api_version_
 # 确保环境变量已加载
 load_dotenv(find_dotenv(), override=True)
 
-
 # 创建一个全局锁
 global_lock = asyncio.Lock()
 

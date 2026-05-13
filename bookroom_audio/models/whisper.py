@@ -69,19 +69,11 @@ def print_transcribing_audio(params: dict):
     ASCIIColors.white("    ├─ language: ", end="")
     ASCIIColors.yellow(f"{params.get('language')}")
 
-
-
 # 异步加载模型，并更新加载/调用时间，便于监控模型加载情况
 async def load_model_task(args: Any, params: dict):
     global model_client
     global model_last_loaded
     print_transcribing_audio(params)
-    """
-    从国内镜像加载Whisper模型
-    """
-    # 设置HF镜像
-    os.environ['HF_ENDPOINT'] = 'https://hf-mirror.com'
-    
     if model_client is None:
         print_model_loading(args, params)
         model_last_loaded = datetime.now()
