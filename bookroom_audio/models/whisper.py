@@ -4,6 +4,7 @@ from typing import Any, Iterable
 from ascii_colors import ASCIIColors
 from faster_whisper import WhisperModel
 from faster_whisper.transcribe import Segment
+import os
 
 from bookroom_audio.utils.utils_api import (
     logger,
@@ -75,6 +76,12 @@ async def load_model_task(args: Any, params: dict):
     global model_client
     global model_last_loaded
     print_transcribing_audio(params)
+    """
+    从国内镜像加载Whisper模型
+    """
+    # 设置HF镜像
+    os.environ['HF_ENDPOINT'] = 'https://hf-mirror.com'
+    
     if model_client is None:
         print_model_loading(args, params)
         model_last_loaded = datetime.now()

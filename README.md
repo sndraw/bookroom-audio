@@ -69,13 +69,14 @@ deactivate
 # Make sure git-lfs is installed (https://git-lfs.com)
 git lfs install
 
-git clone https://hf-mirror.com/guillaumekln/faster-whisper-medium
+git clone https://hf-mirror.com/openai/faster-whisper-large-v3
 ```
 ### **国际模型仓库下载**
 ```bash
 # Make sure git-lfs is installed (https://git-lfs.com)
 git lfs install
-git clone https://huggingface.co/Systran/faster-whisper-medium
+
+git clone https://huggingface.co/openai/faster-whisper-large-v3
 ```
 
 ## 🚀 启动
