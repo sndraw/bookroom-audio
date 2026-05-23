@@ -8,6 +8,7 @@ import os
 import re
 import tempfile
 import threading
+import wave
 from typing import Any, Optional
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
@@ -218,12 +219,17 @@ def generate_audio_pyttsx3(
         if not os.path.exists(temp_path) or os.path.getsize(temp_path) == 0:
             raise Exception("TTS engine generated an empty file.")
 
-        audio = AudioSegment.from_wav(temp_path)
-        audio = audio.set_frame_rate(target_sample_rate)
+        try:
+            audio = AudioSegment.from_wav(temp_path)
+            audio = audio.set_frame_rate(target_sample_rate)
 
-        out_buf = io.BytesIO()
-        audio.export(out_buf, format="wav")
-        audio_data = out_buf.getvalue()
+            out_buf = io.BytesIO()
+            audio.export(out_buf, format="wav")
+            audio_data = out_buf.getvalue()
+        except Exception as e:
+            logger.warning(f"Failed to process audio with pydub: {e}. Using raw file.")
+            with open(temp_path, "rb") as f:
+                audio_data = f.read()
 
         return audio_data
     finally:
