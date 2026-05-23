@@ -2,6 +2,7 @@
 This module contains all TTS (Text-to-Speech) related routes.
 """
 
+import asyncio
 import io
 import os
 import re
