@@ -11,6 +11,13 @@ from bookroom_audio.utils.utils_api import (
     parse_keep_alive,
 )
 
+try:
+    from huggingface_hub.errors import LocalEntryNotFoundError
+    HAS_HF_HUB = True
+except ImportError:
+    LocalEntryNotFoundError = Exception
+    HAS_HF_HUB = False
+
 model_client = None
 model_last_loaded = None
 
@@ -78,15 +85,35 @@ async def load_model_task(args: Any, params: dict):
         print_model_loading(args, params)
         model_last_loaded = datetime.now()
         # 加载Whisper模型,可根据实际情况选择模型大小和设备
-        model_client = WhisperModel(
-            model_size_or_path=params.get("model_size_or_path"),
-            device=args.device,
-            compute_type=args.compute_type,
-            num_workers=args.num_workers,
-            download_root=args.download_root,
-            local_files_only=bool(args.local_files_only),
-        )
-        ASCIIColors.green("\nModel has been loaded\n")
+        try:
+            model_client = WhisperModel(
+                model_size_or_path=params.get("model_size_or_path"),
+                device=args.device,
+                compute_type=args.compute_type,
+                num_workers=args.num_workers,
+                download_root=args.download_root,
+                local_files_only=bool(args.local_files_only),
+            )
+            ASCIIColors.green("\nModel has been loaded\n")
+        except LocalEntryNotFoundError as e:
+            model_name = params.get("model_size_or_path")
+            error_msg = f"""
+模型 '{model_name}' 未在本地缓存中找到。
+
+请按以下步骤解决：
+
+1. 手动下载模型到本地缓存目录：
+   git clone https://huggingface.co/openai/whisper-{model_name} {args.download_root}/openai--whisper-{model_name}
+
+2. 或者设置环境变量允许在线下载：
+   LOCAL_FILES_ONLY=false
+
+3. 确认模型名称正确，支持的模型：
+   tiny, tiny.en, base, base.en, small, small.en, medium, medium.en, large-v1, large-v2, large-v3, large
+   distil-large-v2, distil-large-v3, distil-large-v3.5, distil-medium.en, distil-small.en, large-v3-turbo, turbo
+"""
+            ASCIIColors.red(f"\nModel loading failed: {error_msg}")
+            raise RuntimeError(error_msg)
     
 
     # --- 在此处标准化语言代码 ---

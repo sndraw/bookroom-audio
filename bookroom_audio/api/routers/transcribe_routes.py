@@ -17,6 +17,13 @@ from bookroom_audio.utils.utils_api import (
 
 router = APIRouter(prefix="/v1/audio", tags=["transcribe"])
 
+SUPPORTED_MODELS = {
+    "tiny.en", "tiny", "base.en", "base", "small.en", "small",
+    "medium.en", "medium", "large-v1", "large-v2", "large-v3", "large",
+    "distil-large-v2", "distil-medium.en", "distil-small.en",
+    "distil-large-v3", "distil-large-v3.5", "large-v3-turbo", "turbo"
+}
+
 
 def create_transcribe_routes(args: Any, api_key: Optional[str] = None):
     """
@@ -34,6 +41,13 @@ def create_transcribe_routes(args: Any, api_key: Optional[str] = None):
         try:
             # 确定最终使用的模型标识
             final_model = model or args.model
+
+            # 验证模型名称是否支持
+            if not os.path.exists(final_model) and final_model not in SUPPORTED_MODELS:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Invalid model '{final_model}'. Supported models: {', '.join(sorted(SUPPORTED_MODELS))}"
+                )
 
             # 【调试用】打印正在加载的模型，确认是 ID 还是路径
             logger.info(f"Attempting to load model: {final_model}")
