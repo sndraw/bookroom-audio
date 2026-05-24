@@ -7,6 +7,14 @@ services:
       - ./.cache:/app/.cache
     env_file:
       - .env
+    environment:
+      # TTS 配置
+      TTS_ENGINE: ${TTS_ENGINE:-chattts}
+      TTS_LANGUAGE: ${TTS_LANGUAGE:-zh}
+      # ASR 配置
+      ASR_ENGINE: ${ASR_ENGINE:-qwen-asr}
+      ASR_MODEL: ${ASR_MODEL:-medium}
+      ASR_LANGUAGE: ${ASR_LANGUAGE:-zh}
     restart: unless-stopped
     deploy:
       resources:

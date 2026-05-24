@@ -9,7 +9,11 @@ fi
 
 echo "[$(date '+%Y-%m-%d %H:%M:%S')] Starting bookroom-audio server..."
 echo "[$(date '+%Y-%m-%d %H:%M:%S')] Environment:"
-echo "  - MODEL: ${MODEL:-medium}"
+echo "  - TTS_ENGINE: ${TTS_ENGINE:-chattts}"
+echo "  - TTS_LANGUAGE: ${TTS_LANGUAGE:-zh}"
+echo "  - ASR_ENGINE: ${ASR_ENGINE:-qwen-asr}"
+echo "  - ASR_MODEL: ${ASR_MODEL:-medium}"
+echo "  - ASR_LANGUAGE: ${ASR_LANGUAGE:-zh}"
 echo "  - DEVICE: ${DEVICE:-auto}"
 echo "  - COMPUTE_TYPE: ${COMPUTE_TYPE:-float16}"
 echo "  - NUM_WORKERS: ${NUM_WORKERS:-2}"

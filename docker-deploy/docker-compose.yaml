@@ -7,12 +7,22 @@ services:
     environment:
       TZ: ${TZ:-Asia/Shanghai}
       API_KEY: ${API_KEY:-your_api_key_here}
-      MODEL: ${MODEL:-medium}
+      
+      # TTS 配置
+      TTS_ENGINE: ${TTS_ENGINE:-chattts}
+      TTS_LANGUAGE: ${TTS_LANGUAGE:-zh}
+      
+      # ASR 配置
+      ASR_ENGINE: ${ASR_ENGINE:-qwen-asr}
+      ASR_MODEL: ${ASR_MODEL:-medium}
+      ASR_LANGUAGE: ${ASR_LANGUAGE:-zh}
+      
+      # 通用配置
       DEVICE: ${DEVICE:-auto}
       COMPUTE_TYPE: ${COMPUTE_TYPE:-float16}
-      MODEL_KEEP_ALIVE: ${MODEL_KEEP_ALIVE:-true}
+      MODEL_KEEP_ALIVE: ${MODEL_KEEP_ALIVE:-5m}
       NUM_WORKERS: ${NUM_WORKERS:-2}
-      DOWNLOAD_ROOT: ${DOWNLOAD_ROOT:-./cache}
+      CACHE_DIR: ${CACHE_DIR:-./.cache}
       LOCAL_FILES_ONLY: ${LOCAL_FILES_ONLY:-true}
       HF_ENDPOINT: ${HF_ENDPOINT:-https://hf-mirror.com}
     ports:
