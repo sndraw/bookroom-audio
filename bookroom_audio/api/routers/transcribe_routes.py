@@ -29,6 +29,33 @@ SUPPORTED_ENGINES = {
 }
 
 
+def get_available_engines() -> dict:
+    """获取可用的引擎列表及其状态"""
+    engines = {
+        "whisper": {
+            "available": True,
+            "description": "OpenAI Whisper speech recognition",
+        }
+    }
+    
+    try:
+        from bookroom_audio.models.qwen_asr import is_qwen_asr_available, get_qwen_asr_status
+        qwen_status = get_qwen_asr_status()
+        engines["qwen-asr"] = {
+            "available": qwen_status["available"],
+            "description": "Qwen3-ASR speech recognition",
+            "model_loaded": qwen_status["model_loaded"],
+            "supported_models": qwen_status["supported_models"],
+        }
+    except ImportError:
+        engines["qwen-asr"] = {
+            "available": False,
+            "description": "Qwen3-ASR speech recognition (not installed)",
+        }
+    
+    return engines
+
+
 def create_transcribe_routes(args: Any, api_key: Optional[str] = None):
     """
     Creates and registers the transcription and translation routes.
@@ -51,12 +78,26 @@ def create_transcribe_routes(args: Any, api_key: Optional[str] = None):
                 )
 
             if selected_engine == "qwen-asr":
+                # 检查 Qwen3-ASR 是否可用
+                try:
+                    from bookroom_audio.models.qwen_asr import is_qwen_asr_available
+                    if not is_qwen_asr_available():
+                        raise HTTPException(
+                            status_code=503,
+                            detail="Qwen3-ASR is not available. Please install qwen-asr package: pip install qwen-asr"
+                        )
+                except ImportError:
+                    raise HTTPException(
+                        status_code=503,
+                        detail="Qwen3-ASR is not available. Please install qwen-asr package: pip install qwen-asr"
+                    )
+                
                 from bookroom_audio.models.qwen_asr import load_model_task as qwen_load_model
-                final_model = model or "qwen3-asr"
+                final_model = model or "Qwen/Qwen3-ASR-1.7B"
                 params = dict(
                     audio=file,
                     model_size_or_path=final_model,
-                    language=language or args.language,
+                    language=language or args.model.language,
                     task=task,
                 )
                 results = await qwen_load_model(args, params)
@@ -64,7 +105,7 @@ def create_transcribe_routes(args: Any, api_key: Optional[str] = None):
             else:
                 from bookroom_audio.models.whisper import ModelQueryResponse, load_model_task as whisper_load_model
                 
-                final_model = model or args.model
+                final_model = model or args.model.model
 
                 if not os.path.exists(final_model) and final_model not in SUPPORTED_MODELS:
                     raise HTTPException(
@@ -77,7 +118,7 @@ def create_transcribe_routes(args: Any, api_key: Optional[str] = None):
                 params = dict(
                     audio=file,
                     model_size_or_path=final_model,
-                    language=language or args.language,
+                    language=language or args.model.language,
                     task=task,
                 )
                 results = await whisper_load_model(args, params)
@@ -146,7 +187,7 @@ def create_transcribe_routes(args: Any, api_key: Optional[str] = None):
         operation_id="transcribe_audio",
     )
     async def transcribe_audio(
-        file: Optional[Any] = Form(None),
+        file: Optional[UploadFile] = File(None),
         file_upload: Optional[UploadFile] = File(None),
         model: Optional[str] = Form(None),
         language: Optional[str] = Form(None),
@@ -194,9 +235,7 @@ def create_transcribe_routes(args: Any, api_key: Optional[str] = None):
         """
         Resolves the input file from either legacy 'file' form field or new 'file_upload'.
         """
-        if file:
-            return file
-
+        # 优先处理 file_upload (新的文件上传参数)
         if file_upload:
             try:
                 content = await file_upload.read()
@@ -215,6 +254,38 @@ def create_transcribe_routes(args: Any, api_key: Optional[str] = None):
                 logger.error(f"Failed to process uploaded file: {e}", exc_info=True)
                 raise HTTPException(
                     status_code=500, detail="Failed to process uploaded file"
+                )
+
+        # 处理 legacy file 参数
+        if file:
+            # 检查是否是 UploadFile 对象
+            if hasattr(file, 'read') and hasattr(file, 'filename'):
+                try:
+                    # 如果是 UploadFile 对象，需要 await read()
+                    content = await file.read() if asyncio.iscoroutinefunction(file.read) else file.read()
+                    original_filename = file.filename or "audio.wav"
+                    suffix = os.path.splitext(original_filename)[1]
+
+                    with tempfile.NamedTemporaryFile(
+                        delete=False, suffix=suffix
+                    ) as tmp_file:
+                        tmp_file.write(content)
+                        tmp_file_path = tmp_file.name
+
+                    return tmp_file_path
+                except Exception as e:
+                    logger.error(f"Failed to process file: {e}", exc_info=True)
+                    raise HTTPException(
+                        status_code=500, detail="Failed to process file"
+                    )
+            # 如果是文件路径字符串，直接返回
+            elif isinstance(file, str):
+                return file
+            # 其他情况，尝试作为文件内容处理
+            else:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Invalid file format. Expected file path string or UploadFile.",
                 )
 
         raise HTTPException(

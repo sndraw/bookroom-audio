@@ -55,17 +55,19 @@ def print_model_loading(args: Any, params: dict):
     ASCIIColors.white("    ├─ model_size_or_path: ", end="")
     ASCIIColors.yellow(f"{params.get('model_size_or_path')}")
     ASCIIColors.white("    ├─ device: ", end="")
-    ASCIIColors.yellow(f"{args.device}")
+    ASCIIColors.yellow(f"{args.model.device}")
     ASCIIColors.white("    ├─ compute_type: ", end="")
-    ASCIIColors.yellow(f"{args.compute_type}")
+    ASCIIColors.yellow(f"{args.model.compute_type}")
     ASCIIColors.white("    ├─ num_workers: ", end="")
-    ASCIIColors.yellow(f"{args.num_workers}")
+    ASCIIColors.yellow(f"{args.model.num_workers}")
     ASCIIColors.white("    ├─ model_keep_alive: ", end="")
-    ASCIIColors.yellow(f"{args.model_keep_alive}")
+    ASCIIColors.yellow(f"{args.model.model_keep_alive}")
     ASCIIColors.white("    ├─ download_root: ", end="")
-    ASCIIColors.yellow(f"{args.download_root}")
+    from bookroom_audio.utils.config import get_config
+    config = get_config()
+    ASCIIColors.yellow(f"{config.cache.cache_dir}")
     ASCIIColors.white("    ├─ local_files_only: ", end="")
-    ASCIIColors.yellow(f"{args.local_files_only}")
+    ASCIIColors.yellow(f"{config.cache.local_files_only}")
     
 def print_transcribing_audio(params: dict):
     ASCIIColors.blue("\nTranscribing audio...\n")
@@ -86,24 +88,30 @@ async def load_model_task(args: Any, params: dict):
         model_last_loaded = datetime.now()
         # 加载Whisper模型,可根据实际情况选择模型大小和设备
         try:
+            # 使用统一的配置系统获取缓存参数
+            from bookroom_audio.utils.config import get_config
+            config = get_config()
+            
             model_client = WhisperModel(
                 model_size_or_path=params.get("model_size_or_path"),
-                device=args.device,
-                compute_type=args.compute_type,
-                num_workers=args.num_workers,
-                download_root=args.download_root,
-                local_files_only=bool(args.local_files_only),
+                device=args.model.device,
+                compute_type=args.model.compute_type,
+                num_workers=args.model.num_workers,
+                download_root=config.cache.cache_dir,
+                local_files_only=config.cache.local_files_only,
             )
             ASCIIColors.green("\nModel has been loaded\n")
         except LocalEntryNotFoundError as e:
             model_name = params.get("model_size_or_path")
+            from bookroom_audio.utils.config import get_config
+            config = get_config()
             error_msg = f"""
 模型 '{model_name}' 未在本地缓存中找到。
 
 请按以下步骤解决：
 
 1. 手动下载模型到本地缓存目录：
-   git clone https://huggingface.co/openai/whisper-{model_name} {args.download_root}/openai--whisper-{model_name}
+   git clone https://huggingface.co/openai/whisper-{model_name} {config.cache.cache_dir}/openai--whisper-{model_name}
 
 2. 或者设置环境变量允许在线下载：
    LOCAL_FILES_ONLY=false
@@ -124,7 +132,8 @@ async def load_model_task(args: Any, params: dict):
     if original_language and original_language != normalized_language:
         ASCIIColors.yellow(f"Language code converted: '{original_language}' -> '{normalized_language}'")
 
-    result, _ = model_client.transcribe(
+    result, _ = await asyncio.to_thread(
+        model_client.transcribe,
         audio=params.get("audio"), 
         task=params.get("task"), 
         language=normalized_language, # 使用标准化后的语言代码
@@ -153,7 +162,7 @@ async def run_model_loaded_process(args: Any):
     """Run the model loaded process in a background task"""
     global model_last_loaded
     while True:
-        model_keep_alive = parse_keep_alive(args.model_keep_alive)
+        model_keep_alive = parse_keep_alive(args.model.model_keep_alive)
         try:
             # model_keep_alive 小于0秒，直接退出循环
             if model_keep_alive < 0 or model_keep_alive is None:

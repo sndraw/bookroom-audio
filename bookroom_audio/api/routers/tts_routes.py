@@ -32,11 +32,43 @@ try:
 except ImportError:
     PYTTSX3_AVAILABLE = False
 
-try:
-    import ChatTTS
-    CHATTTS_AVAILABLE = True
-except ImportError:
-    CHATTTS_AVAILABLE = False
+# ChatTTS 延迟导入，避免启动时加载复杂依赖
+CHATTTS_AVAILABLE = False
+
+def _check_chattss_available() -> bool:
+    """检查 ChatTTS 是否可用（延迟检查）"""
+    global CHATTTS_AVAILABLE
+    if not CHATTTS_AVAILABLE:
+        try:
+            import ChatTTS
+            CHATTTS_AVAILABLE = True
+        except ImportError:
+            CHATTTS_AVAILABLE = False
+    return CHATTTS_AVAILABLE
+
+
+def _get_chattss_status() -> dict:
+    """获取 ChatTTS 完整状态信息"""
+    global _chattts_model
+    
+    model_status = _check_chattss_model_files()
+    
+    return {
+        "available": _check_chattss_available(),
+        "model_loaded": _chattts_model is not None,
+        "model_files_complete": model_status["complete"],
+        "existing_files": model_status["existing"],
+        "missing_files": model_status["missing"],
+        "download_url": model_status["download_url"],
+        "download_command": model_status["download_method"],
+        "description": "ChatTTS - 高质量中文离线TTS引擎，支持情感控制和多音色",
+        "features": [
+            "支持中文语音合成",
+            "支持情感控制（happy, sad, angry, neutral）",
+            "支持多音色选择（male, female）",
+            "离线运行，无需网络",
+        ]
+    }
 
 router = APIRouter(prefix="/v1/tts", tags=["tts"])
 
@@ -252,15 +284,121 @@ _chattts_model = None
 _chattts_lock = threading.Lock()
 
 
+def _check_chattss_model_files() -> dict:
+    """检查 ChatTTS 模型文件是否完整"""
+    from bookroom_audio.utils.config import get_config
+    config = get_config()
+    
+    # 检查统一缓存目录中的 ChatTTS 模型
+    chattts_cache_dir = os.path.join(config.cache.cache_dir, "models--2Noise--ChatTTS")
+    
+    required_files = {
+        "snapshots/*/asset/DVAE.safetensors": "~57MB",
+        "snapshots/*/asset/Decoder.safetensors": "~98MB",
+        "snapshots/*/asset/Embed.safetensors": "~1GB",
+        "snapshots/*/asset/Vocos.safetensors": "~1GB",
+        "snapshots/*/asset/gpt/model.safetensors": "~813MB",
+        "snapshots/*/asset/tokenizer/tokenizer.json": "小文件",
+        "snapshots/*/asset/tokenizer/tokenizer_config.json": "小文件",
+        "snapshots/*/asset/tokenizer/special_tokens_map.json": "小文件",
+    }
+    
+    missing_files = []
+    existing_files = []
+    
+    # 检查缓存目录是否存在
+    if not os.path.exists(chattts_cache_dir):
+        return {
+            "complete": False,
+            "missing": ["整个 ChatTTS 模型目录"],
+            "existing": [],
+            "cache_dir": chattts_cache_dir,
+            "download_url": "https://hf-mirror.com/2Noise/ChatTTS",
+            "download_method": "HF_ENDPOINT=https://hf-mirror.com huggingface-cli download 2Noise/ChatTTS"
+        }
+    
+    # 检查模型文件完整性
+    import glob
+    for file_pattern, size in required_files.items():
+        # 使用 glob 匹配文件（支持 * 通配符）
+        matched_files = glob.glob(os.path.join(chattts_cache_dir, file_pattern))
+        if matched_files:
+            existing_files.append(f"{file_pattern} ({size})")
+        else:
+            missing_files.append(f"{file_pattern} ({size})")
+    
+    return {
+        "complete": len(missing_files) == 0,
+        "missing": missing_files,
+        "existing": existing_files,
+        "cache_dir": chattts_cache_dir,
+        "download_url": "https://hf-mirror.com/2Noise/ChatTTS",
+        "download_method": "HF_ENDPOINT=https://hf-mirror.com huggingface-cli download 2Noise/ChatTTS"
+    }
+
+
 def get_chattts_model():
     global _chattts_model
     if _chattts_model is None:
         with _chattts_lock:
             if _chattts_model is None:
                 logger.info("Loading ChatTTS model...")
-                _chattts_model = ChatTTS.Chat()
-                _chattts_model.load(compile=False)
-                logger.info("ChatTTS model loaded successfully")
+                try:
+                    # 设置ChatTTS模型缓存目录
+                    from bookroom_audio.utils.config import get_config
+                    config = get_config()
+                    cache_dir = config.cache.cache_dir
+                    
+                    # 设置Hugging Face缓存环境变量，确保ChatTTS模型下载到统一目录
+                    os.environ["TRANSFORMERS_CACHE"] = cache_dir
+                    os.environ["HF_HOME"] = cache_dir
+                    os.environ["HUGGINGFACE_HUB_CACHE"] = cache_dir
+                    
+                    logger.info(f"ChatTTS model cache directory: {cache_dir}")
+                    
+                    # 延迟导入 ChatTTS
+                    import ChatTTS
+                    _chattts_model = ChatTTS.Chat()
+                    
+                    # 使用 Hugging Face 源下载模型，这样可以利用 HF_ENDPOINT 环境变量
+                    # 默认的 local 源使用 GitHub 下载，可能在某些网络环境下无法访问
+                    logger.info("Downloading ChatTTS model from Hugging Face...")
+                    success = _chattts_model.load(
+                        source="huggingface",
+                        compile=False
+                    )
+                    
+                    if success:
+                        logger.info("ChatTTS model loaded successfully")
+                    else:
+                        raise RuntimeError("ChatTTS model download failed")
+                        
+                except ImportError as e:
+                    logger.error(f"ChatTTS import failed: {e}")
+                    raise RuntimeError("ChatTTS is not installed. Please install it with: pip install chattts")
+                except Exception as e:
+                    logger.error(f"Failed to load ChatTTS model: {e}")
+                    # 检查模型文件完整性
+                    model_status = _check_chattss_model_files()
+                    if not model_status["complete"]:
+                        error_msg = f"""
+ChatTTS 模型文件不完整
+
+已存在的文件:
+{chr(10).join(f"  ✓ {f}" for f in model_status["existing"])}
+
+缺失的文件:
+{chr(10).join(f"  ✗ {f}" for f in model_status["missing"])}
+
+推荐下载方法（使用 HF Mirror）:
+  {model_status["download_method"]}
+
+或者手动下载:
+  {model_status["download_url"]}
+                        """
+                        logger.error(error_msg)
+                        raise RuntimeError(error_msg)
+                    raise
     return _chattts_model
 
 
@@ -292,13 +430,34 @@ def generate_audio_chatt(
     else:
         params["speaker_id"] = 0
 
-    wav = model.infer(text, params=params)[0]
+    # ChatTTS 返回的是 numpy 数组，需要正确处理
+    wav = model.infer(text)[0]
+    
+    # 确保数据是 numpy 数组
+    import numpy as np
+    if isinstance(wav, np.ndarray):
+        # ChatTTS 返回的是 float32 数据，需要转换为 int16
+        # 首先归一化到 [-1, 1]
+        wav = wav / np.max(np.abs(wav))
+        # 然后转换为 int16 (范围 -32768 到 32767)
+        wav = (wav * 32767).astype(np.int16)
+    
+    # 确保数据长度是 sample_width * channels 的倍数
+    sample_width = 2  # 16-bit
+    channels = 1
+    data_len = len(wav) if isinstance(wav, np.ndarray) else len(wav.tobytes())
+    padding = (sample_width * channels) - (data_len % (sample_width * channels))
+    if padding < (sample_width * channels):
+        if isinstance(wav, np.ndarray):
+            wav = np.pad(wav, (0, padding // sample_width), mode='constant')
+        else:
+            wav = wav + b'\x00' * padding
 
     audio = AudioSegment(
-        wav,
+        wav.tobytes() if isinstance(wav, np.ndarray) else wav,
         frame_rate=24000,
-        sample_width=2,
-        channels=1
+        sample_width=sample_width,
+        channels=channels
     )
 
     audio = audio.set_frame_rate(target_sample_rate)
@@ -316,18 +475,20 @@ def select_engine(engine: str, text: str) -> str:
     has_chinese = detect_language(text) == "zh"
 
     if has_chinese:
-        if CHATTTS_AVAILABLE:
+        if _check_chattss_available():
             return "chattts"
         elif EDGE_TTS_AVAILABLE:
+            logger.info("ChatTTS not available, falling back to Edge TTS for Chinese text")
             return "edge-tts"
         elif PYTTSX3_AVAILABLE:
+            logger.info("ChatTTS and Edge TTS not available, falling back to pyttsx3 for Chinese text")
             return "pyttsx3"
     else:
         if PYTTSX3_AVAILABLE:
             return "pyttsx3"
         elif EDGE_TTS_AVAILABLE:
             return "edge-tts"
-        elif CHATTTS_AVAILABLE:
+        elif _check_chattss_available():
             return "chattts"
 
     raise ValueError("No TTS engine available")
@@ -354,7 +515,7 @@ def create_tts_routes(args: Any, api_key: Optional[str] = None):
             selected_engine = select_engine(request.engine, request.text)
 
             if selected_engine == "chattts":
-                if not CHATTTS_AVAILABLE:
+                if not _check_chattss_available():
                     raise HTTPException(status_code=500, detail="ChatTTS not available")
 
                 voice = request.voice or request.voice_id
@@ -437,11 +598,20 @@ def create_tts_routes(args: Any, api_key: Optional[str] = None):
             "available_engines": [],
         }
 
-        if CHATTTS_AVAILABLE:
+        chattss_status = _get_chattss_status()
+        if chattss_status["available"]:
             result["chattts"] = {
                 "voices": CHATTTS_VOICES,
                 "emotions": CHATTTS_EMOTIONS,
-                "description": "高质量中文离线TTS，支持情感控制",
+                "description": chattss_status["description"],
+                "features": chattss_status["features"],
+                "model_loaded": chattss_status["model_loaded"],
+                "model_files_complete": chattss_status["model_files_complete"],
+                "missing_files": chattss_status["missing_files"] if not chattss_status["model_files_complete"] else [],
+                "download_info": {
+                    "url": chattss_status["download_url"],
+                    "command": chattss_status["download_command"],
+                } if not chattss_status["model_files_complete"] else None,
             }
             result["available_engines"].append("chattts")
 
