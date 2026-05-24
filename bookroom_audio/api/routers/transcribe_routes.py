@@ -7,7 +7,7 @@ import tempfile
 import os
 from typing import Any, Optional
 from fastapi import APIRouter, Depends, Form, HTTPException, File, UploadFile
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from bookroom_audio.utils.utils_api import (
     get_api_key_dependency,
@@ -163,16 +163,20 @@ def create_transcribe_routes(args: Any, api_key: Optional[str] = None):
     @router.post(
         "/translations",
         dependencies=[Depends(optional_api_key)],
+        operation_id="translate_audio",
+        summary="Translate audio to text",
+        description="Translate audio content from the source language to English text. "
+                    "Note: Only Whisper engine supports translation. Qwen3-ASR does not support translation.",
     )
     async def translate_audio(
-        file: Optional[Any] = Form(None),
-        file_upload: Optional[UploadFile] = File(None),
-        model: Optional[str] = Form(None),
-        language: Optional[str] = Form(None),
-        engine: Optional[str] = Form(None),
+        file: Optional[Any] = Form(None, description="Audio file to translate (legacy parameter)"),
+        file_upload: Optional[UploadFile] = File(None, description="Audio file to translate"),
+        model: Optional[str] = Form(None, description="Model name/path for Whisper: tiny, base, small, medium, large, large-v2, large-v3"),
+        language: Optional[str] = Form(None, description="Source language code (e.g., zh for Chinese, en for English). Auto-detected if not provided."),
+        engine: Optional[str] = Form(None, description="Speech recognition engine. Only whisper supports translation. Default: whisper"),
     ):
         """
-        Translate audio content to text in a target language.
+        Translate audio content to text in a target language (English).
         """
         actual_file = await _resolve_file_input(file, file_upload)
         
@@ -185,19 +189,22 @@ def create_transcribe_routes(args: Any, api_key: Optional[str] = None):
         "/transcriptions",
         dependencies=[Depends(optional_api_key)],
         operation_id="transcribe_audio",
+        summary="Transcribe audio to text",
+        description="Transcribe audio content to text in the source language. "
+                    "Supports Qwen3-ASR and Whisper engines.",
     )
     async def transcribe_audio(
-        file: Optional[UploadFile] = File(None),
-        file_upload: Optional[UploadFile] = File(None),
-        model: Optional[str] = Form(None),
-        language: Optional[str] = Form(None),
-        engine: Optional[str] = Form(None),
+        file: Optional[UploadFile] = File(None, description="Audio file to transcribe (legacy parameter)"),
+        file_upload: Optional[UploadFile] = File(None, description="Audio file to transcribe"),
+        model: Optional[str] = Form(None, description="Model name/path. For Whisper: tiny, base, small, medium, large, large-v2, large-v3. For Qwen3-ASR: qwen3-asr (default)"),
+        language: Optional[str] = Form(None, description="Language code (e.g., zh for Chinese, en for English). Auto-detected if not provided."),
+        engine: Optional[str] = Form(None, description="Speech recognition engine. Options: whisper, qwen-asr. Default: qwen-asr"),
     ):
         """
         Transcribe audio content to text in the source language.
         
-        Parameters:
-            file: Legacy file input
+        Args:
+            file: Legacy file input (deprecated, use file_upload)
             file_upload: File upload input
             model: Model name/path (depends on engine)
             language: Language code (e.g., zh, en)

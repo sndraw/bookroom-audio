@@ -12,7 +12,7 @@ import wave
 from typing import Any, Optional
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from pydub import AudioSegment
 
 from bookroom_audio.utils.utils_api import (
@@ -76,7 +76,7 @@ router = APIRouter(prefix="/v1/tts", tags=["tts"])
 class TTSRequest(BaseModel):
     """
     TTS 请求参数模型。
-
+    
     Attributes:
         text: 需要转换的文本内容。
         voice_id: 可选的声音 ID 或名称（兼容旧版）。
@@ -88,14 +88,14 @@ class TTSRequest(BaseModel):
         emotion: 情感类型（仅ChatTTS支持），可选: happy, sad, angry, neutral。
     """
 
-    text: str
-    voice_id: Optional[str] = None
-    voice: Optional[str] = None
-    rate: Any = 200
-    volume: Any = 1.0
-    sample_rate: int = 16000
-    engine: str = "auto"
-    emotion: str = "neutral"
+    text: str = Field(..., description="Text content to convert to speech")
+    voice_id: Optional[str] = Field(None, description="Voice ID or name (legacy parameter, use voice instead)")
+    voice: Optional[str] = Field(None, description="Voice name. For ChatTTS: use voice index (0-10). For Edge TTS: zh-CN-XiaoxiaoNeural, zh-CN-YunxiNeural, etc.")
+    rate: Any = Field(200, description="Speech rate. Integer (WPM) or percentage format (e.g., +10%, -20%)")
+    volume: Any = Field(1.0, description="Volume level. Float between 0.0-1.0 or percentage format (e.g., 50%, 100%)")
+    sample_rate: int = Field(16000, description="Audio sample rate in Hz. Common values: 16000, 22050, 44100")
+    engine: str = Field("auto", description="TTS engine. Options: chattts, edge-tts, pyttsx3, auto. Auto selects based on text language")
+    emotion: str = Field("neutral", description="Emotion type (ChatTTS only). Options: happy, sad, angry, neutral")
 
 
 CHINESE_VOICES = [
@@ -502,7 +502,9 @@ def create_tts_routes(args: Any, api_key: Optional[str] = None):
         response_class=StreamingResponse,
         dependencies=[Depends(optional_api_key)],
         summary="Generate speech from text",
-        description="Converts the provided text into speech audio.",
+        description="Converts the provided text into speech audio. "
+                    "Supports multiple TTS engines including ChatTTS, Edge TTS, and pyttsx3. "
+                    "Returns WAV format audio stream.",
         operation_id="generate_tts",
     )
     async def generate_tts(request: TTSRequest):
