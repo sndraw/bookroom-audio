@@ -82,11 +82,15 @@ def create_app(args) -> FastAPI:
     openapi_tags=[
         {
             "name":"server",
-            "description": "Server routes for server."
+            "description": "Server management routes."
         },
         {
             "name": "transcribe",
-            "description": "API routes for transcribe."
+            "description": "Speech Recognition (ASR) API routes. Supports Qwen3-ASR and Whisper models."
+        },
+        {
+            "name": "tts",
+            "description": "Text-to-Speech (TTS) API routes. Supports ChatTTS and MeloTTS models."
         },
     ]
     app = FastAPI(

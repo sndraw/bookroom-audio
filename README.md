@@ -1,11 +1,12 @@
 
 # BookRoom Audio
-> 本地语音识别API
+> 本地语音合成与识别API
 >
-> API for translating audio to text using Whisper model.
+> API for speech synthesis (TTS) and speech recognition (ASR).
 
 ## 使用说明
 ### 支持OpenAI调用方式
+
 #### 1. **语音转译**
 ``` js
 result = await openai.audio.translations.create({
@@ -26,12 +27,61 @@ result = await openai.audio.transcriptions.create({
 });
 ```
 
+#### 3. **语音合成**
+``` js
+// 生成语音
+const response = await fetch('http://localhost:15231/v1/tts/generate', {
+    method: 'POST',
+    headers: {
+        'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+        text: '你好，这是一个语音合成测试',
+        engine: 'chattts',
+        language: 'zh'
+    })
+});
+```
+
 ### 部署后访问以下地址查看API文档 
 #### 1. **Swagger UI(Docs)**
 `http://localhost:15231/docs`
 
 #### 2. **ReDoc**
 `http://localhost:15231/redoc`
+
+## 🎯 主要功能
+
+### 🔊 语音合成 (TTS)
+- **ChatTTS** - 支持中文语音合成，支持多种情感和音色
+- **MeloTTS** - 支持中文、英文、日文等多种语言
+- 支持语音和情感选择
+- 输出WAV格式音频
+
+### 🎤 语音识别 (ASR)
+- **Qwen3-ASR** - 阿里达摩院语音识别模型
+- **Whisper** - OpenAI语音识别模型
+- 支持多种语言识别
+- 支持音频文件上传和流式识别
+
+## 🔧 配置说明
+
+### 默认配置
+```bash
+# TTS 配置
+TTS_ENGINE=chattts
+TTS_LANGUAGE=zh
+
+# ASR 配置  
+ASR_ENGINE=qwen-asr
+ASR_MODEL=medium
+ASR_LANGUAGE=zh
+```
+
+### 配置方式
+1. **环境变量配置** - 修改 `.env` 文件
+2. **命令行参数** - 启动时指定参数
+3. **Docker环境变量** - 通过docker-compose配置
 
 ## 🛠️ 安装
 ```bash
@@ -126,4 +176,4 @@ make build-push-all REGISTRY_URL=<IP:port>/<repository> IMAGE_NAME=sndraw/bookro
 ### 模型设置
 ![模型配置](./docs/assets/模型设置.png)  
 ### 语音识别
-![语音识别](./docs/assets/语音识别.png)  
+![语音识别](./docs/assets/语音识别.png)
