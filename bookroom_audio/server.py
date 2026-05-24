@@ -1,4 +1,6 @@
 import asyncio
+import signal
+import sys
 from contextlib import asynccontextmanager
 import os
 from fastapi import FastAPI, HTTPException, Request, Response
@@ -14,6 +16,7 @@ from bookroom_audio.models.whisper import (
 )
 from bookroom_audio.api.routers.server_routes import create_server_routes
 from bookroom_audio.api.routers.transcribe_routes import create_transcribe_routes
+from bookroom_audio.api.routers.tts_routes import create_tts_routes
 from bookroom_audio.utils.utils_api import (
     get_cors_origins,
     parse_args,
@@ -24,9 +27,11 @@ from bookroom_audio.api import __api_name__, __api_description__, __api_version_
 # 确保环境变量已加载
 load_dotenv(find_dotenv(), override=True)
 
-
 # 创建一个全局锁
 global_lock = asyncio.Lock()
+
+# 全局关闭标志
+shutdown_event = asyncio.Event()
 
 def create_app(args) -> FastAPI:
 
@@ -35,6 +40,15 @@ def create_app(args) -> FastAPI:
         """Lifespan context manager for startup and shutdown events"""
         # Store background tasks
         app.state.background_tasks = set()
+        
+        # 设置信号处理器
+        def signal_handler(signum, frame):
+            logger.info(f"Received signal {signum}, initiating graceful shutdown...")
+            shutdown_event.set()
+        
+        signal.signal(signal.SIGINT, signal_handler)
+        signal.signal(signal.SIGTERM, signal_handler)
+        
         try:
             async with global_lock:
                 task = asyncio.create_task(run_model_loaded_process(args))
@@ -43,22 +57,40 @@ def create_app(args) -> FastAPI:
             ASCIIColors.green("\nServer is ready to accept connections! 🚀\n")
             yield
         finally:
+            ASCIIColors.yellow("\nInitiating graceful shutdown...\n")
+            
+            # 取消所有后台任务
             async with global_lock:
-                # 取消所有后台任务
                 for task in app.state.background_tasks:
-                    task.cancel()
+                    if not task.done():
+                        task.cancel()
+                        try:
+                            await asyncio.wait_for(task, timeout=2.0)
+                        except (asyncio.CancelledError, asyncio.TimeoutError):
+                            pass
+            
             ASCIIColors.green("\nServer is shutting down! 🛑\n")
+            
             # 在应用关闭时清理模型
-            await cleanup_model()
+            try:
+                await cleanup_model()
+            except Exception as e:
+                logger.error(f"Error during model cleanup: {e}")
+            
+            ASCIIColors.green("\nShutdown completed gracefully. Goodbye! 👋\n")
 
     openapi_tags=[
         {
             "name":"server",
-            "description": "Server routes for server."
+            "description": "Server management routes."
         },
         {
             "name": "transcribe",
-            "description": "API routes for transcribe."
+            "description": "Speech Recognition (ASR) API routes. Supports Qwen3-ASR and Whisper models."
+        },
+        {
+            "name": "tts",
+            "description": "Text-to-Speech (TTS) API routes. Supports ChatTTS and MeloTTS models."
         },
     ]
     app = FastAPI(
@@ -86,10 +118,10 @@ def create_app(args) -> FastAPI:
         allow_headers=["*"],
     )
 
-    if args.debug:
+    if args.server.debug:
         app.debug = True
 
-    api_key = args.key
+    api_key = args.server.api_key
 
 
     # 自定义错误处理程序
@@ -115,33 +147,39 @@ def create_app(args) -> FastAPI:
 
     app.include_router(create_transcribe_routes(args, api_key))
     app.include_router(create_server_routes(args, api_key))
+    app.include_router(create_tts_routes(args, api_key))
     return app
 
 args = parse_args()
 
+# 打印配置摘要
+from bookroom_audio.utils.config import print_config_summary
+print_config_summary()
+
 app = create_app(args)
 
 def main():
+    
     # Start Uvicorn in single process mode
     uvicorn_config = {
-        "host": args.host,
-        "port": args.port,
+        "host": args.server.host,
+        "port": args.server.port,
     }
-    if args.reload:
+    if args.server.reload:
         uvicorn_config["reload"] = True
         
-    if args.workers > 1:
-        uvicorn_config["workers"] = args.workers
+    if args.server.workers > 1:
+        uvicorn_config["workers"] = args.server.workers
         
-    if args.ssl:
+    if args.server.ssl:
         uvicorn_config.update(
             {
-                "ssl_certfile": args.ssl_certfile,
-                "ssl_keyfile": args.ssl_keyfile,
+                "ssl_certfile": args.server.ssl_certfile,
+                "ssl_keyfile": args.server.ssl_keyfile,
             }
         )
 
-    if args.debug:
+    if args.server.debug:
         ASCIIColors.yellow("\nServer is running in debug mode! \n")
            
     uvicorn.run("bookroom_audio.server:app", **uvicorn_config)

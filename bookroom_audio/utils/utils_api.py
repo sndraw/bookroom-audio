@@ -7,6 +7,7 @@ from fastapi import HTTPException, Security
 from fastapi.security import APIKeyHeader
 from starlette.status import HTTP_403_FORBIDDEN
 from bookroom_audio.api import __api_name__
+from bookroom_audio.utils.config import get_config, AppConfig, app_config
 
 logger = logging.getLogger(__api_name__)
 # 创建一个 StreamHandler 将日志输出到控制台
@@ -30,117 +31,147 @@ def get_cors_origins():
     return [origin.strip() for origin in origins_str.split(",")]
 
 
-def parse_args():
+def parse_args() -> AppConfig:
+    """解析命令行参数并返回统一的应用配置"""
     parser = argparse.ArgumentParser(
         description="Transcribe audio using Whisper model."
     )
 
+    # 服务器配置
     parser.add_argument(
         "--key",
         type=str,
-        default=os.getenv("API_KEY", None),
+        default=None,
         help="API key for authentication. This protects server against unauthorized access",
+    )
+
+    parser.add_argument(
+        "--debug",
+        type=lambda x: x.lower() == "true",
+        default=None,
+        help="Enable debug mode. Default is False.",
+    )
+
+    parser.add_argument(
+        "--host",
+        type=str,
+        default=None,
+        help="Host to run the server on (default: 0.0.0.0).",
+    )
+
+    parser.add_argument(
+        "--port",
+        type=int,
+        default=None,
+        help="Port to run the server on (default: 15231).",
+    )
+
+    parser.add_argument(
+        "--ssl",
+        type=lambda x: x.lower() == "true",
+        default=None,
+        help="Enable SSL. Default is False.",
+    )
+
+    parser.add_argument(
+        "--ssl-certfile",
+        default=None,
+        help="Path to SSL certificate file (required if --ssl is enabled)",
+    )
+
+    parser.add_argument(
+        "--ssl-keyfile",
+        default=None,
+        help="Path to SSL private key file (required if --ssl is enabled)",
+    )
+
+    parser.add_argument(
+        "--workers",
+        type=int,
+        default=None,
+        help="Number of workers to use for transcription (default:1).",
+    )
+
+    parser.add_argument(
+        "--reload",
+        action="store_true",
+        help="Reload the model on every request (default: False).",
+    )
+
+    # 模型配置
+    parser.add_argument(
+        "--engine",
+        type=str,
+        default=None,
+        help="Speech recognition engine to use: whisper or qwen-asr (default: whisper).",
     )
 
     parser.add_argument(
         "--model",
         type=str,
-        default=os.getenv("MODEL", "medium"),
+        default=None,
         help="Size or path of the Whisper model to use (default: medium).",
     )
 
     parser.add_argument(
         "--language",
         type=str,
-        default=os.getenv("LANGUAGE", "en"),
+        default=None,
         help="Size or path of the Whisper model to use (default: en).",
     )
-    parser.add_argument(
-        "--local-files-only",
-        type=lambda x: x.lower() == "true",
-        choices=["true", "false"],
-        default=str(os.getenv("LOCAL_FILES_ONLY", "True")).lower(),
-        help="Whether to only allow local files (default: True).",
-    )
-    parser.add_argument(
-        "--model-keep-alive",
-        type=str,
-        default=os.getenv("MODEL_KEEP_ALIVE", "5m"),
-        help="How long to keep the model in memory before unloading it (default: 5m).",
-    )
+
     parser.add_argument(
         "--device",
         type=str,
-        default=os.getenv("DEVICE", "cpu"),
+        default=None,
         help="Device to run the model on (default: cpu).",
     )
+
     parser.add_argument(
         "--compute-type",
         type=str,
-        default=os.getenv("MODEL_SIZE", "int8"),
+        default=None,
         help="Compute type for the model (default: int8).",
     )
+
+    parser.add_argument(
+        "--model-keep-alive",
+        type=str,
+        default=None,
+        help="How long to keep the model in memory before unloading it (default: 5m).",
+    )
+
     parser.add_argument(
         "--num-workers",
         type=int,
-        default=os.getenv("NUM_WORKERS", 1),
+        default=None,
         help="Number workders for the model (default: 1).",
     )
+
+    # 缓存配置
     parser.add_argument(
         "--download-root",
         type=str,
-        default=os.getenv("DOWNLOAD_ROOT", "./.cache"),
+        default=None,
         help="Download workders for the model (default: ./.cache).",
     )
+
     parser.add_argument(
-        "--debug",
+        "--local-files-only",
         type=lambda x: x.lower() == "true",
-        choices=["true", "false"],
-        default=str(os.getenv("SERVER_DEBUG", "False")).lower(),
-        help="Enable debug mode. Default is False.",
+        default=None,
+        help="Whether to only allow local files (default: True).",
     )
-    parser.add_argument(
-        "--host",
-        type=str,
-        default=os.getenv("SERVER_HOST", "0.0.0.0"),
-        help="Host to run the server on (default: 0.0.0.0).",
-    )
-    parser.add_argument(
-        "--port",
-        type=int,
-        default=os.getenv("SERVER_PORT", 15231),
-        help="Port to run the server on (default: 15231).",
-    )
-    parser.add_argument(
-        "--ssl",
-        type=lambda x: x.lower() == "true",
-        choices=["true", "false"],
-        default=str(os.getenv("SERVER_SSL", "False")).lower(),
-        help="Enable SSL. Default is False.",
-    )
-    parser.add_argument(
-        "--ssl-certfile",
-        default=os.getenv("SSL_CERTFILE", None),
-        help="Path to SSL certificate file (required if --ssl is enabled)",
-    )
-    parser.add_argument(
-        "--ssl-keyfile",
-        default=os.getenv("SSL_KEYFILE", None),
-        help="Path to SSL private key file (required if --ssl is enabled)",
-    )
-    parser.add_argument(
-        "--workers",
-        type=int,
-        default=os.getenv("SERVER_WORKERS", 1),
-        help="Number of workers to use for transcription (default:1).",
-    )
-    parser.add_argument(
-        "--reload",
-        action="store_true",
-        help="Reload the model on every request (default: False).",
-    )
+
     args = parser.parse_args()
-    return args
+    
+    # 从环境变量创建配置
+    config = AppConfig.from_env()
+    
+    # 从命令行参数更新配置
+    config.update_from_args(args)
+    
+    return config
 
 
 def get_api_key_dependency(api_key: Optional[str]):
@@ -190,20 +221,24 @@ def get_api_key_dependency(api_key: Optional[str]):
 
 
 def parse_keep_alive(keep_alive):
-    # 如果是负数,则返回None
-    if keep_alive is None or int(keep_alive) < 0:
+    if keep_alive is None or keep_alive == "":
         return -1
-    # 如果是字符串,则解析为秒数,支持m,s,h格式
-    if isinstance(keep_alive, str):
-        if keep_alive.isdigit():
-            return int(keep_alive)
-        elif "m" in keep_alive:
-            return int(keep_alive[:-1]) * 60
-        elif "h" in keep_alive:
-            return int(keep_alive[:-1]) * 3600
-        elif "s" in keep_alive:
-            return int(keep_alive[:-1])
+    
+    try:
+        # 尝试将字符串转换为整数
+        return int(keep_alive) * 60  # 假设单位是分钟，转换为秒
+    
+    except ValueError:
+        # 如果失败，检查是否包含时间单位（如 'm'）
+        if isinstance(keep_alive, str) and keep_alive[-1] in ['s', 'm', 'h']:
+            value = int(keep_alive[:-1])
+            unit = keep_alive[-1]
+            
+            if unit == 's':
+                return value
+            elif unit == 'm':
+                return value * 60
+            elif unit == 'h':
+                return value * 3600
         else:
-            raise ValueError("Invalid keep_alive format")
-    # 否则默认为5分钟（300秒）
-    return 5 * 60
+            raise ValueError(f"Invalid keep_alive value: {keep_alive}")

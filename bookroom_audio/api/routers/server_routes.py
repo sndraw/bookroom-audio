@@ -24,7 +24,7 @@ def create_server_routes(args: Any, api_key: Optional[str] = None):
     # Create the optional API key dependency
     optional_api_key = get_api_key_dependency(api_key)
 
-    @router.get("/health", response_model=ServerResponse)
+    @router.get("/health", response_model=ServerResponse, operation_id="get_status_health")
     async def get_status():
         """Get current system status"""
         return ServerResponse(status="healthy", message="System is running normally.")

@@ -1,9 +1,21 @@
 #!/bin/bash
+set -e
 
 cd /app
 
-# 激活虚拟环境
-source .venv/bin/activate
+if [ -f .env ]; then
+    export $(cat .env | grep -v '^#' | xargs)
+fi
 
-# 运行应用
-uv run -m bookroom_audio.server 
+echo "[$(date '+%Y-%m-%d %H:%M:%S')] Starting bookroom-audio server..."
+echo "[$(date '+%Y-%m-%d %H:%M:%S')] Environment:"
+echo "  - TTS_ENGINE: ${TTS_ENGINE:-chattts}"
+echo "  - TTS_LANGUAGE: ${TTS_LANGUAGE:-zh}"
+echo "  - ASR_ENGINE: ${ASR_ENGINE:-qwen-asr}"
+echo "  - ASR_MODEL: ${ASR_MODEL:-medium}"
+echo "  - ASR_LANGUAGE: ${ASR_LANGUAGE:-zh}"
+echo "  - DEVICE: ${DEVICE:-auto}"
+echo "  - COMPUTE_TYPE: ${COMPUTE_TYPE:-float16}"
+echo "  - NUM_WORKERS: ${NUM_WORKERS:-2}"
+
+.venv/bin/python -m bookroom_audio.server

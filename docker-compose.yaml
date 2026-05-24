@@ -5,7 +5,33 @@ services:
       - "${EXPOSE_PORT:-15231}:${PORT:-15231}"
     volumes:
       - ./.cache:/app/.cache
-      - ./docker/entrypoint.sh:/entrypoint.sh:ro
     env_file:
       - .env
+    environment:
+      # TTS 配置
+      TTS_ENGINE: ${TTS_ENGINE:-chattts}
+      TTS_LANGUAGE: ${TTS_LANGUAGE:-zh}
+      # ASR 配置
+      ASR_ENGINE: ${ASR_ENGINE:-qwen-asr}
+      ASR_MODEL: ${ASR_MODEL:-medium}
+      ASR_LANGUAGE: ${ASR_LANGUAGE:-zh}
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 8G
+          cpus: '4.0'
+        reservations:
+          memory: 4G
+          cpus: '2.0'
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:${PORT:-15231}/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"

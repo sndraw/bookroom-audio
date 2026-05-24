@@ -1,0 +1,56 @@
+services:
+  audio:
+    image: sndraw/bookroom-audio:latest
+    restart: unless-stopped
+    volumes:
+      - ./volumes/bookroom-audio/.cache:/app/.cache
+    environment:
+      TZ: ${TZ:-Asia/Shanghai}
+      API_KEY: ${API_KEY:-your_api_key_here}
+      
+      # TTS 配置
+      TTS_ENGINE: ${TTS_ENGINE:-chattts}
+      TTS_LANGUAGE: ${TTS_LANGUAGE:-zh}
+      
+      # ASR 配置
+      ASR_ENGINE: ${ASR_ENGINE:-qwen-asr}
+      ASR_MODEL: ${ASR_MODEL:-medium}
+      ASR_LANGUAGE: ${ASR_LANGUAGE:-zh}
+      
+      # 通用配置
+      DEVICE: ${DEVICE:-auto}
+      COMPUTE_TYPE: ${COMPUTE_TYPE:-float16}
+      MODEL_KEEP_ALIVE: ${MODEL_KEEP_ALIVE:-5m}
+      NUM_WORKERS: ${NUM_WORKERS:-2}
+      CACHE_DIR: ${CACHE_DIR:-./.cache}
+      LOCAL_FILES_ONLY: ${LOCAL_FILES_ONLY:-true}
+      HF_ENDPOINT: ${HF_ENDPOINT:-https://hf-mirror.com}
+    ports:
+      - "${EXPOSE_PORT:-15231}:${PORT:-15231}"
+    networks:
+      - bookroom_audio_shared_network
+      - default
+    deploy:
+      resources:
+        limits:
+          memory: 8G
+          cpus: '4.0'
+        reservations:
+          memory: 4G
+          cpus: '2.0'
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:${PORT:-15231}/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+networks:
+  bookroom_audio_shared_network:
+    driver: bridge
+    internal: true

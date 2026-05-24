@@ -1,11 +1,12 @@
 
 # BookRoom Audio
-> 本地语音识别API
+> 本地语音合成与识别API
 >
-> API for translating audio to text using Whisper model.
+> API for speech synthesis (TTS) and speech recognition (ASR).
 
 ## 使用说明
 ### 支持OpenAI调用方式
+
 #### 1. **语音转译**
 ``` js
 result = await openai.audio.translations.create({
@@ -26,12 +27,61 @@ result = await openai.audio.transcriptions.create({
 });
 ```
 
+#### 3. **语音合成**
+``` js
+// 生成语音
+const response = await fetch('http://localhost:15231/v1/tts/generate', {
+    method: 'POST',
+    headers: {
+        'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+        text: '你好，这是一个语音合成测试',
+        engine: 'chattts',
+        language: 'zh'
+    })
+});
+```
+
 ### 部署后访问以下地址查看API文档 
 #### 1. **Swagger UI(Docs)**
 `http://localhost:15231/docs`
 
 #### 2. **ReDoc**
 `http://localhost:15231/redoc`
+
+## 🎯 主要功能
+
+### 🔊 语音合成 (TTS)
+- **ChatTTS** - 支持中文语音合成，支持多种情感和音色
+- **MeloTTS** - 支持中文、英文、日文等多种语言
+- 支持语音和情感选择
+- 输出WAV格式音频
+
+### 🎤 语音识别 (ASR)
+- **Qwen3-ASR** - 阿里达摩院语音识别模型
+- **Whisper** - OpenAI语音识别模型
+- 支持多种语言识别
+- 支持音频文件上传和流式识别
+
+## 🔧 配置说明
+
+### 默认配置
+```bash
+# TTS 配置
+TTS_ENGINE=chattts
+TTS_LANGUAGE=zh
+
+# ASR 配置  
+ASR_ENGINE=qwen-asr
+ASR_MODEL=medium
+ASR_LANGUAGE=zh
+```
+
+### 配置方式
+1. **环境变量配置** - 修改 `.env` 文件
+2. **命令行参数** - 启动时指定参数
+3. **Docker环境变量** - 通过docker-compose配置
 
 ## 🛠️ 安装
 ```bash
@@ -44,8 +94,8 @@ cd bookroom-audio
 # 如果你还没有安装 uv，请先安装（可能需要需要设置uv到系统环境变量）
 pip install uv
 
-# 创建虚拟环境并安装依赖，支持 Python 3.10
-uv venv .venv --python=3.10
+# 创建虚拟环境并安装依赖，支持 Python 3.11
+uv venv .venv --python=3.11
 
 # 激活虚拟环境
 ## macOS/Linux
@@ -53,11 +103,12 @@ source .venv/bin/activate
 ## Windows
 .venv\Scripts\activate
 
+# 如果需要支持cuda，请参照Nvidia官网说明安装CUDA、cuDNN，并根据所安装版本替换并进行torch等依赖库安装
+uv add torch torchvision torchaudio --default-index https://pypi.org/simple --index https://download.pytorch.org/whl/cu126
+
+
 # 安装所有依赖
 uv pip install -e .
-
-# 如果需要支持cuda，请参照Nvidia官网说明安装CUDA、cuDNN，并根据所安装版本替换并进行torch等依赖库安装
-uv pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu126
 
 # 完成后退出虚拟环境
 deactivate
@@ -68,13 +119,14 @@ deactivate
 # Make sure git-lfs is installed (https://git-lfs.com)
 git lfs install
 
-git clone https://hf-mirror.com/guillaumekln/faster-whisper-medium
+git clone https://hf-mirror.com/openai/faster-whisper-large-v3
 ```
 ### **国际模型仓库下载**
 ```bash
 # Make sure git-lfs is installed (https://git-lfs.com)
 git lfs install
-git clone https://huggingface.co/Systran/faster-whisper-medium
+
+git clone https://huggingface.co/openai/faster-whisper-large-v3
 ```
 
 ## 🚀 启动
@@ -91,6 +143,7 @@ MODEL_KEEP_ALIVE=5m # 模型保持时间，默认为5分钟，如果为-1则为�
 NUM_WORKERS=1 # 工作线程数，默认为1个
 DOWNLOAD_ROOT=./cache # 下载模型等文件的缓存路径
 LOCAL_FILES_ONLY=true # 是否只使用本地文件，不从网络下载，默认为true
+HF_ENDPOINT=https://hf-mirror.com # 模型仓库地址，默认为 https://huggingface.co
 ```
 
 
@@ -114,7 +167,7 @@ docker login -u username <IP:port>/<repository>
 #### make命令（参数可选）
 注：Makefile中定义了build-push-all目标，可以一次性构建并推送镜像
 ```bash
-make build-push-all REGISTRY_URL=<IP:port>/<repository> IMAGE_NAME=sndraw/bookroom-audio IMAGE_VERISON=0.0.1
+make build-push-all REGISTRY_URL=<IP:port>/<repository> IMAGE_NAME=sndraw/bookroom-audio IMAGE_VERSION=0.0.1
 ```
 
 ## 截图展示
@@ -123,4 +176,4 @@ make build-push-all REGISTRY_URL=<IP:port>/<repository> IMAGE_NAME=sndraw/bookro
 ### 模型设置
 ![模型配置](./docs/assets/模型设置.png)  
 ### 语音识别
-![语音识别](./docs/assets/语音识别.png)  
+![语音识别](./docs/assets/语音识别.png)

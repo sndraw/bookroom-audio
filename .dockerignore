@@ -62,3 +62,4 @@ TODO.md
 .github
 .gitignore
 .pre-commit-config.yaml
+tests/
