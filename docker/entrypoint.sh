@@ -18,4 +18,5 @@ echo "  - DEVICE: ${DEVICE:-auto}"
 echo "  - COMPUTE_TYPE: ${COMPUTE_TYPE:-float16}"
 echo "  - NUM_WORKERS: ${NUM_WORKERS:-2}"
 
-.venv/bin/python -m bookroom_audio.server
+# Use uv run to activate the virtual environment and run the server
+uv run python -m bookroom_audio.server
