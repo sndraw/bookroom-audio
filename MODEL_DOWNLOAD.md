@@ -86,23 +86,57 @@ HF_ENDPOINT=https://www.modelscope.cn huggingface-cli download Qwen/Qwen3-ASR-1.
 
 ### Whisper 系列（OpenAI 官方版本）
 
-> **重要**: 推荐使用 OpenAI 官方版本的 Whisper 模型，第三方版本可能包含广告或修改。
+> ⚠️ **安全提示**: 本系统**禁止自动下载** Whisper 模型，必须手动下载 OpenAI 官方版本。
+> 
+> **原因**: 非官方版本（如 Systran/faster-whisper-*）可能包含广告或恶意代码。
 
-#### ModelScope 模型地址
+#### ModelScope 模型地址（推荐国内使用）
 - **Base**: https://www.modelscope.cn/models/openai/whisper-base
 - **Medium**: https://www.modelscope.cn/models/openai/whisper-medium
 - **Large-v3**: https://www.modelscope.cn/models/openai/whisper-large-v3
 
+#### 强制手动下载命令
+
 ```bash
+# 设置阿里 ModelScope 为下载源（国内推荐）
+export HF_ENDPOINT=https://www.modelscope.cn
+
 # Base 模型
-HF_ENDPOINT=https://www.modelscope.cn huggingface-cli download openai/whisper-base
+huggingface-cli download openai/whisper-base
 
 # Medium 模型（推荐）
-HF_ENDPOINT=https://www.modelscope.cn huggingface-cli download openai/whisper-medium
+huggingface-cli download openai/whisper-medium
 
 # Large-v3 模型
-HF_ENDPOINT=https://www.modelscope.cn huggingface-cli download openai/whisper-large-v3
+huggingface-cli download openai/whisper-large-v3
 ```
+
+#### 备选下载方式（官方 Hugging Face）
+
+```bash
+# 设置官方 Hugging Face 为下载源（国外）
+export HF_ENDPOINT=https://huggingface.co
+
+# Medium 模型
+huggingface-cli download openai/whisper-medium
+```
+
+#### ✅ 支持的官方模型
+| 模型名称 | 大小 | 说明 |
+|---------|------|------|
+| `tiny` / `tiny.en` | ~75MB | 最小模型，速度最快 |
+| `base` / `base.en` | ~142MB | 基础模型 |
+| `small` / `small.en` | ~466MB | 小型模型 |
+| `medium` / `medium.en` | ~1.5GB | 中等模型（推荐） |
+| `large-v3` | ~3.0GB | 大型模型，效果最好 |
+| `distil-large-v3` | ~1.5GB | 蒸馏版大型模型 |
+
+#### ❌ 不推荐的非官方模型
+- `Systran/faster-whisper-*` - 第三方修改版本，可能包含广告
+- 其他非 `openai/` 前缀的 Whisper 模型
+
+#### 模型缓存位置
+下载后模型会自动存放在 `.cache/models--openai--whisper-{model_name}` 目录下。
 
 ## 环境变量配置
 

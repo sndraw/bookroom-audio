@@ -30,6 +30,7 @@ dependencies = [
     "transformers>=4.45.0",
     "accelerate>=0.34.0",
     "pillow>=10.0.0",
+    "modelscope>=1.37.1",
 ]
 
 [tool.setuptools.packages.find]

@@ -127,8 +127,11 @@ huggingface-cli download 2Noise/ChatTTS
 # 下载 Qwen3-ASR 模型
 huggingface-cli download Qwen/Qwen3-ASR-1.7B
 
-# 下载 Whisper 模型（使用 OpenAI 官方版本）
-huggingface-cli download openai/whisper-medium
+# 下载 Whisper 模型（⚠️ 必须手动下载，禁止自动下载）
+# 使用阿里 ModelScope（国内推荐）
+HF_ENDPOINT=https://www.modelscope.cn huggingface-cli download openai/whisper-medium
+# 或使用官方 Hugging Face（国外）
+# HF_ENDPOINT=https://huggingface.co huggingface-cli download openai/whisper-medium
 
 # 下载 MeloTTS 中文模型
 huggingface-cli download myshell-ai/MeloTTS-Chinese
