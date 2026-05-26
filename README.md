@@ -114,19 +114,43 @@ uv pip install -e .
 deactivate
 ```
 ## 📚 模型下载（本地模式）
-### **国内模型仓库下载**
-```bash
-# Make sure git-lfs is installed (https://git-lfs.com)
-git lfs install
 
-git clone https://www.modelscope.cn/models/iic/Whisper-large-v3
+### **推荐使用阿里 ModelScope（国内访问更稳定）**
+
+```bash
+# 设置环境变量
+export HF_ENDPOINT=https://www.modelscope.cn
+
+# 下载 ChatTTS 模型（推荐）
+huggingface-cli download 2Noise/ChatTTS
+
+# 下载 Qwen3-ASR 模型
+huggingface-cli download Qwen/Qwen3-ASR-1.7B
+
+# 下载 Whisper 模型
+huggingface-cli download Systran/faster-whisper-medium
+
+# 下载 MeloTTS 中文模型
+huggingface-cli download myshell-ai/MeloTTS-Chinese
 ```
+
+### **ModelScope 模型地址汇总**
+| 模型 | ModelScope 地址 |
+|------|----------------|
+| ChatTTS | https://www.modelscope.cn/models/2Noise/ChatTTS |
+| Qwen3-ASR-1.7B | https://www.modelscope.cn/models/Qwen/Qwen3-ASR-1.7B |
+| faster-whisper-medium | https://www.modelscope.cn/models/Systran/faster-whisper-medium |
+| MeloTTS-Chinese | https://www.modelscope.cn/models/myshell-ai/MeloTTS-Chinese |
+
 ### **国际模型仓库下载**
 ```bash
-# Make sure git-lfs is installed (https://git-lfs.com)
-git lfs install
+# 设置环境变量
+export HF_ENDPOINT=https://huggingface.co
 
-git clone https://huggingface.co/openai/faster-whisper-large-v3
+# 下载模型
+huggingface-cli download 2Noise/ChatTTS
+huggingface-cli download Qwen/Qwen3-ASR-1.7B
+huggingface-cli download Systran/faster-whisper-medium
 ```
 
 ## 🚀 启动

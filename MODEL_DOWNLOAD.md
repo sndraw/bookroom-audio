@@ -4,27 +4,38 @@
 
 所有模型（TTS 和 ASR）现在统一存储在 `.cache` 目录下，便于管理和维护。
 
+## 模型下载源配置
+
+推荐使用阿里 ModelScope 作为模型下载源（国内访问更稳定）：
+
+```bash
+# 设置环境变量
+export HF_ENDPOINT=https://www.modelscope.cn
+
+# 或在 .env 文件中配置
+HF_ENDPOINT=https://www.modelscope.cn
+```
+
 ## ChatTTS 模型下载
 
-### 下载地址
-ChatTTS 模型官方仓库：https://www.modelscope.cn/2Noise/ChatTTS/tree/main
+### ModelScope 模型地址
+- **网页浏览**: https://www.modelscope.cn/models/2Noise/ChatTTS
+- **模型名称**: `2Noise/ChatTTS`
 
 ### 推荐下载方法
 
 #### 方法1：使用 huggingface-cli（推荐）
 ```bash
 cd bookroom-audio
-HF_ENDPOINT=https://www.modelscope.cn huggingface-cli download 2Noise/ChatTTS
+HF_ENDPOINT=https://www.modelscope.cn huggingface-cli download 2Noise/ChatTTS --local-dir ./.cache/models--2Noise--ChatTTS --local-dir-use-symlinks False
 ```
 
 模型会自动下载到 `.cache/models--2Noise--ChatTTS/` 目录。
 
-#### 方法2：使用 git clone（需要 git-lfs）
-```bash
-git lfs install
-git clone https://www.modelscope.cn/2Noise/ChatTTS
-mv ChatTTS/* bookroom-audio/.cache/models--2Noise--ChatTTS/
-```
+#### 方法2：手动下载（从 ModelScope 网页）
+1. 访问 https://www.modelscope.cn/models/2Noise/ChatTTS
+2. 点击"下载"按钮下载完整模型文件
+3. 解压到 `.cache/models--2Noise--ChatTTS/snapshots/{commit_hash}/` 目录
 
 ### 验证下载完整性
 ```bash
@@ -44,6 +55,12 @@ ls -la ./.cache/models--2Noise--ChatTTS/snapshots/*/asset/
 ## 其他 TTS 模型
 
 ### MeloTTS 系列
+
+#### ModelScope 模型地址
+- **中文**: https://www.modelscope.cn/models/myshell-ai/MeloTTS-Chinese
+- **英文**: https://www.modelscope.cn/models/myshell-ai/MeloTTS-English
+- **日语**: https://www.modelscope.cn/models/myshell-ai/MeloTTS-Japanese
+
 ```bash
 # 中文模型
 HF_ENDPOINT=https://www.modelscope.cn huggingface-cli download myshell-ai/MeloTTS-Chinese
@@ -58,11 +75,22 @@ HF_ENDPOINT=https://www.modelscope.cn huggingface-cli download myshell-ai/MeloTT
 ## ASR 模型
 
 ### Qwen3-ASR
+
+#### ModelScope 模型地址
+- **网页浏览**: https://www.modelscope.cn/models/Qwen/Qwen3-ASR-1.7B
+- **模型名称**: `Qwen/Qwen3-ASR-1.7B`
+
 ```bash
 HF_ENDPOINT=https://www.modelscope.cn huggingface-cli download Qwen/Qwen3-ASR-1.7B
 ```
 
 ### Whisper 系列
+
+#### ModelScope 模型地址
+- **Base**: https://www.modelscope.cn/models/Systran/faster-whisper-base
+- **Medium**: https://www.modelscope.cn/models/Systran/faster-whisper-medium
+- **Large-v3**: https://www.modelscope.cn/models/Systran/faster-whisper-large-v3
+
 ```bash
 # Base 模型
 HF_ENDPOINT=https://www.modelscope.cn huggingface-cli download Systran/faster-whisper-base
