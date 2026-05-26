@@ -367,6 +367,32 @@ def generate_audio_chatt(
     from bookroom_audio.api.routers.tts.constants import CHATTTS_VOICES, CHATTTS_EMOTIONS
     
     model = _get_chattss_model()
+    
+    # 如果模型未加载，尝试自动加载
+    if model is None:
+        logger.info("ChatTTS model not loaded, attempting automatic loading...")
+        
+        # 检查模型文件是否存在
+        model_status = _check_chattss_model_files()
+        if not model_status['complete']:
+            raise Exception(f"ChatTTS model files not found. Missing: {model_status['missing']}. Please download the model first.")
+        
+        # 尝试加载模型
+        global _chattts_model
+        import ChatTTS
+        _chattts_model = ChatTTS.Chat()
+        
+        try:
+            success = _chattts_model.load(source="huggingface", compile=False)
+            if success and _chattts_model.has_loaded():
+                logger.info("ChatTTS model loaded successfully!")
+                model = _chattts_model
+            else:
+                raise Exception("Failed to load ChatTTS model - components not initialized")
+        except Exception as e:
+            _chattts_model = None
+            raise Exception(f"Failed to load ChatTTS model: {str(e)}")
+    
     if model is None:
         raise Exception("ChatTTS model not loaded")
     
