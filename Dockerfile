@@ -26,6 +26,9 @@ COPY ./uv.lock ./uv.lock
 # Let uv handle the Python version and create the environment
 RUN uv sync --no-cache
 
+# Install Linux-specific NVIDIA dependencies
+RUN uv pip install nvidia-cusparselt-cu13==0.8.0
+
 # Copy application code
 COPY ./bookroom_audio ./bookroom_audio
 COPY ./docker/entrypoint.sh /entrypoint.sh
