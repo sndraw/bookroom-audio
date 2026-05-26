@@ -1,6 +1,7 @@
 services:
   audio:
-    image: sndraw/bookroom-audio:latest
+    image: bookroom-audio:latest
+    build: ..
     restart: unless-stopped
     volumes:
       - ./volumes/bookroom-audio/.cache:/app/.cache
@@ -17,14 +18,18 @@ services:
       ASR_MODEL: ${ASR_MODEL:-medium}
       ASR_LANGUAGE: ${ASR_LANGUAGE:-zh}
       
+      # VL (Vision-Language) 配置
+      VL_MODEL: ${VL_MODEL:-medium}
+      VL_FRAME_INTERVAL: ${VL_FRAME_INTERVAL:-10}
+      
       # 通用配置
       DEVICE: ${DEVICE:-auto}
       COMPUTE_TYPE: ${COMPUTE_TYPE:-float16}
       MODEL_KEEP_ALIVE: ${MODEL_KEEP_ALIVE:-5m}
       NUM_WORKERS: ${NUM_WORKERS:-2}
       CACHE_DIR: ${CACHE_DIR:-./.cache}
-      LOCAL_FILES_ONLY: ${LOCAL_FILES_ONLY:-true}
-      HF_ENDPOINT: ${HF_ENDPOINT:-https://hf-mirror.com}
+      LOCAL_FILES_ONLY: ${LOCAL_FILES_ONLY:-false}
+      HF_ENDPOINT: ${HF_ENDPOINT:-https://www.modelscope.cn}
     ports:
       - "${EXPOSE_PORT:-15231}:${PORT:-15231}"
     networks:
