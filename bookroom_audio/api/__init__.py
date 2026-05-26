@@ -79,4 +79,4 @@ BookRoom Audio API - 提供完整的语音合成(TTS)、语音识别(ASR)、视�
 - ReDoc: `/redoc`
 - OpenAPI Schema: `/openapi.json`
 """
-__api_version__ = "0.0.6"
+__api_version__ = "0.0.7"

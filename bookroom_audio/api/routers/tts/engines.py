@@ -209,6 +209,18 @@ def _check_chattss_model_files() -> dict:
     missing_files = []
     existing_files = []
     
+    # 获取环境变量配置的模型下载端点
+    hf_endpoint = os.getenv("HF_ENDPOINT", "https://hf-mirror.com")
+    modelscope_endpoint = os.getenv("MODELSCOPE_ENDPOINT", "https://www.modelscope.cn")
+    
+    # 根据配置选择下载端点
+    if hf_endpoint == "https://www.modelscope.cn":
+        download_url = f"{modelscope_endpoint}/models/2Noise/ChatTTS"
+        download_method = f"HF_ENDPOINT={modelscope_endpoint} huggingface-cli download 2Noise/ChatTTS"
+    else:
+        download_url = f"{hf_endpoint}/2Noise/ChatTTS"
+        download_method = f"HF_ENDPOINT={hf_endpoint} huggingface-cli download 2Noise/ChatTTS"
+    
     # 检查缓存目录是否存在
     if not os.path.exists(chattts_cache_dir):
         return {
@@ -216,8 +228,8 @@ def _check_chattss_model_files() -> dict:
             "missing": ["整个 ChatTTS 模型目录"],
             "existing": [],
             "cache_dir": chattts_cache_dir,
-            "download_url": "https://hf-mirror.com/2Noise/ChatTTS",
-            "download_method": "HF_ENDPOINT=https://hf-mirror.com huggingface-cli download 2Noise/ChatTTS"
+            "download_url": download_url,
+            "download_method": download_method
         }
     
     # 检查模型文件完整性
@@ -233,8 +245,8 @@ def _check_chattss_model_files() -> dict:
         "missing": missing_files,
         "existing": existing_files,
         "cache_dir": chattts_cache_dir,
-        "download_url": "https://hf-mirror.com/2Noise/ChatTTS",
-        "download_method": "HF_ENDPOINT=https://hf-mirror.com huggingface-cli download 2Noise/ChatTTS"
+        "download_url": download_url,
+        "download_method": download_method
     }
 
 
@@ -263,8 +275,11 @@ def _get_chattss_model():
                     import ChatTTS
                     _chattts_model = ChatTTS.Chat()
                     
-                    # 使用 Hugging Face 源下载模型
-                    logger.info("Downloading ChatTTS model from Hugging Face...")
+                    # 使用 Hugging Face 源加载模型
+                    logger.info("Loading ChatTTS model...")
+                    # 设置本地文件优先
+                    os.environ["HF_HUB_OFFLINE"] = "1" if config.cache.local_files_only else "0"
+                    
                     success = _chattts_model.load(
                         source="huggingface",
                         compile=False
