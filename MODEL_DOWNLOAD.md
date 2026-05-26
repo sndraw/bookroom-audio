@@ -84,22 +84,24 @@ HF_ENDPOINT=https://www.modelscope.cn huggingface-cli download myshell-ai/MeloTT
 HF_ENDPOINT=https://www.modelscope.cn huggingface-cli download Qwen/Qwen3-ASR-1.7B
 ```
 
-### Whisper 系列
+### Whisper 系列（OpenAI 官方版本）
+
+> **重要**: 推荐使用 OpenAI 官方版本的 Whisper 模型，第三方版本可能包含广告或修改。
 
 #### ModelScope 模型地址
-- **Base**: https://www.modelscope.cn/models/Systran/faster-whisper-base
-- **Medium**: https://www.modelscope.cn/models/Systran/faster-whisper-medium
-- **Large-v3**: https://www.modelscope.cn/models/Systran/faster-whisper-large-v3
+- **Base**: https://www.modelscope.cn/models/openai/whisper-base
+- **Medium**: https://www.modelscope.cn/models/openai/whisper-medium
+- **Large-v3**: https://www.modelscope.cn/models/openai/whisper-large-v3
 
 ```bash
 # Base 模型
-HF_ENDPOINT=https://www.modelscope.cn huggingface-cli download Systran/faster-whisper-base
+HF_ENDPOINT=https://www.modelscope.cn huggingface-cli download openai/whisper-base
 
-# Medium 模型
-HF_ENDPOINT=https://www.modelscope.cn huggingface-cli download Systran/faster-whisper-medium
+# Medium 模型（推荐）
+HF_ENDPOINT=https://www.modelscope.cn huggingface-cli download openai/whisper-medium
 
 # Large-v3 模型
-HF_ENDPOINT=https://www.modelscope.cn huggingface-cli download Systran/faster-whisper-large-v3
+HF_ENDPOINT=https://www.modelscope.cn huggingface-cli download openai/whisper-large-v3
 ```
 
 ## 环境变量配置

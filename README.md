@@ -127,20 +127,20 @@ huggingface-cli download 2Noise/ChatTTS
 # 下载 Qwen3-ASR 模型
 huggingface-cli download Qwen/Qwen3-ASR-1.7B
 
-# 下载 Whisper 模型
-huggingface-cli download Systran/faster-whisper-medium
+# 下载 Whisper 模型（使用 OpenAI 官方版本）
+huggingface-cli download openai/whisper-medium
 
 # 下载 MeloTTS 中文模型
 huggingface-cli download myshell-ai/MeloTTS-Chinese
 ```
 
 ### **ModelScope 模型地址汇总**
-| 模型 | ModelScope 地址 |
-|------|----------------|
-| ChatTTS | https://www.modelscope.cn/models/2Noise/ChatTTS |
-| Qwen3-ASR-1.7B | https://www.modelscope.cn/models/Qwen/Qwen3-ASR-1.7B |
-| faster-whisper-medium | https://www.modelscope.cn/models/Systran/faster-whisper-medium |
-| MeloTTS-Chinese | https://www.modelscope.cn/models/myshell-ai/MeloTTS-Chinese |
+| 模型 | ModelScope 地址 | 说明 |
+|------|----------------|------|
+| ChatTTS | https://www.modelscope.cn/models/2Noise/ChatTTS | 高质量中文语音合成 |
+| Qwen3-ASR-1.7B | https://www.modelscope.cn/models/Qwen/Qwen3-ASR-1.7B | 阿里语音识别模型 |
+| whisper-medium | https://www.modelscope.cn/models/openai/whisper-medium | OpenAI 官方 Whisper（推荐） |
+| MeloTTS-Chinese | https://www.modelscope.cn/models/myshell-ai/MeloTTS-Chinese | 多语言语音合成 |
 
 ### **国际模型仓库下载**
 ```bash
@@ -150,7 +150,7 @@ export HF_ENDPOINT=https://huggingface.co
 # 下载模型
 huggingface-cli download 2Noise/ChatTTS
 huggingface-cli download Qwen/Qwen3-ASR-1.7B
-huggingface-cli download Systran/faster-whisper-medium
+huggingface-cli download openai/whisper-medium  # OpenAI 官方版本，无广告
 ```
 
 ## 🚀 启动
