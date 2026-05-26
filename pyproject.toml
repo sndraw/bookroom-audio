@@ -25,6 +25,7 @@ dependencies = [
     "torch>=2.6.0",
     "torchaudio>=2.6.0",
     "torchvision>=0.21.0",
+    "nvidia-cusparselt-cu13",
     "uvicorn>=0.34.0",
     "vector-quantize-pytorch>=1.29.1",
     "transformers>=4.45.0",

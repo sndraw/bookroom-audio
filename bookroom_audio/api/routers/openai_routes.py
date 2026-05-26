@@ -26,18 +26,16 @@ from bookroom_audio.utils.utils_api import (
     logger,
 )
 
-router = APIRouter(
-    prefix="/v1",
-    tags=["openai-compatible"],
-    responses={
-        400: {"description": "Invalid request parameters"},
-        401: {"description": "Unauthorized - Invalid API key"},
-        500: {"description": "Internal server error"},
-    },
-)
-
-
 def create_openai_routes(args: Any, api_key: Optional[str] = None):
+    router = APIRouter(
+        prefix="/v1",
+        tags=["openai-compatible"],
+        responses={
+            400: {"description": "Invalid request parameters"},
+            401: {"description": "Unauthorized - Invalid API key"},
+            500: {"description": "Internal server error"},
+        },
+    )
     optional_api_key = get_api_key_dependency(api_key)
 
     async def _save_upload_file(file: UploadFile) -> str:

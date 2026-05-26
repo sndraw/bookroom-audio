@@ -332,6 +332,7 @@ dependencies = [
     { name = "einx" },
     { name = "fastapi" },
     { name = "faster-whisper" },
+    { name = "nvidia-cusparselt-cu13" },
     { name = "openai-whisper" },
     { name = "pillow" },
     { name = "pydub" },
@@ -357,6 +358,7 @@ requires-dist = [
     { name = "einx", specifier = ">=0.4.3" },
     { name = "fastapi", specifier = ">=0.115.11" },
     { name = "faster-whisper", specifier = ">=1.1.1" },
+    { name = "nvidia-cusparselt-cu13" },
     { name = "openai-whisper", specifier = ">=20240930" },
     { name = "pillow", specifier = ">=10.0.0" },
     { name = "pydub", specifier = ">=0.25.1" },
@@ -1916,6 +1918,7 @@ source = { registry = "https://pypi.org/simple" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/46/10/8dcd1175260706a2fc92a16a52e306b71d4c1ea0b0cc4a9484183399818a/nvidia_cusparselt_cu13-0.8.0-py3-none-manylinux2014_aarch64.whl", hash = "sha256:400c6ed1cf6780fc6efedd64ec9f1345871767e6a1a0a552a1ea0578117ea77c", size = 220791277, upload-time = "2025-08-13T19:22:40.982Z" },
     { url = "https://files.pythonhosted.org/packages/fd/53/43b0d71f4e702fa9733f8b4571fdca50a8813f1e450b656c239beff12315/nvidia_cusparselt_cu13-0.8.0-py3-none-manylinux2014_x86_64.whl", hash = "sha256:25e30a8a7323935d4ad0340b95a0b69926eee755767e8e0b1cf8dd85b197d3fd", size = 169884119, upload-time = "2025-08-13T19:23:41.967Z" },
+    { url = "https://files.pythonhosted.org/packages/57/de/8f0578928b9b1246d7b1324db0528e6b9f9fb54496a49f40bf71f09f1a27/nvidia_cusparselt_cu13-0.8.0-py3-none-win_amd64.whl", hash = "sha256:e80212ed7b1afc97102fbb2b5c82487aa73f6a0edfa6d26c5a152593e520bb8f", size = 156459710, upload-time = "2025-08-13T19:24:18.043Z" },
 ]
 
 [[package]]
