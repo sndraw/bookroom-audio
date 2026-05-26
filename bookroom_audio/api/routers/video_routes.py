@@ -159,7 +159,7 @@ def create_video_routes(args: Any, api_key: Optional[str] = None):
     @router.post(
         "/recognize",
         dependencies=[Depends(optional_api_key)],
-        operation_id="recognize_video",
+        operation_id="video_recognize",
         summary="识别视频内容",
         description="""
 识别视频中的视觉内容，包括物体、场景、人物动作等。
@@ -218,7 +218,7 @@ def create_video_routes(args: Any, api_key: Optional[str] = None):
     @router.post(
         "/score",
         dependencies=[Depends(optional_api_key)],
-        operation_id="score_video",
+        operation_id="video_score",
         summary="视频内容评分",
         description="""
 对视频内容进行质量和适宜性评分。
@@ -278,7 +278,7 @@ def create_video_routes(args: Any, api_key: Optional[str] = None):
     @router.post(
         "/moderate",
         dependencies=[Depends(optional_api_key)],
-        operation_id="moderate_video",
+        operation_id="video_moderate",
         summary="视频内容监测",
         description="""
 检测视频中是否包含违规内容。
@@ -341,7 +341,7 @@ def create_video_routes(args: Any, api_key: Optional[str] = None):
     @router.post(
         "/analyze",
         dependencies=[Depends(optional_api_key)],
-        operation_id="analyze_video",
+        operation_id="video_analyze",
         summary="完整视频分析",
         description="""
 同时进行视频内容识别、评分和监测三项分析。
@@ -415,7 +415,7 @@ def create_video_routes(args: Any, api_key: Optional[str] = None):
     @router.get(
         "/models",
         dependencies=[Depends(optional_api_key)],
-        operation_id="list_vl_models",
+        operation_id="video_list_models",
         summary="获取支持的VL模型列表",
         description="""
 获取所有支持的 Qwen3-VL 模型列表，包含模型名称、描述、参数规模和推荐配置。
@@ -479,7 +479,7 @@ def create_video_routes(args: Any, api_key: Optional[str] = None):
     @router.get(
         "/tasks",
         dependencies=[Depends(optional_api_key)],
-        operation_id="list_vl_tasks",
+        operation_id="video_list_tasks",
         summary="获取支持的任务类型",
         description="""
 获取所有支持的视频分析任务类型及其详细描述。
@@ -541,7 +541,7 @@ def create_video_routes(args: Any, api_key: Optional[str] = None):
     @router.get(
         "/status",
         dependencies=[Depends(optional_api_key)],
-        operation_id="get_vl_status",
+        operation_id="video_get_status",
         summary="获取VL模型状态",
         description="""
 获取 Qwen3-VL 模型的当前状态，包括是否可用、是否已加载、当前模型等信息。

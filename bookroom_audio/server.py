@@ -18,6 +18,7 @@ from bookroom_audio.api.routers.server_routes import create_server_routes
 from bookroom_audio.api.routers.transcribe_routes import create_transcribe_routes
 from bookroom_audio.api.routers.tts_routes import create_tts_routes
 from bookroom_audio.api.routers.video_routes import create_video_routes
+from bookroom_audio.api.routers.image_routes import create_image_routes
 from bookroom_audio.api.routers.openai_routes import create_openai_routes
 from bookroom_audio.utils.utils_api import (
     get_cors_origins,
@@ -106,8 +107,12 @@ def create_app(args) -> FastAPI:
             "description": "Video content analysis and moderation API routes. Supports Qwen3-VL models."
         },
         {
+            "name": "image",
+            "description": "Image content analysis and moderation API routes. Supports Qwen3-VL models."
+        },
+        {
             "name": "openai-compatible",
-            "description": "OpenAI-compatible API routes. Supports audio transcription, translation, speech synthesis, and video analysis."
+            "description": "OpenAI-compatible API routes. Supports audio transcription, translation, speech synthesis, video analysis, and image analysis."
         },
     ]
     app = FastAPI(
@@ -166,6 +171,7 @@ def create_app(args) -> FastAPI:
     app.include_router(create_server_routes(args, api_key))
     app.include_router(create_tts_routes(args, api_key))
     app.include_router(create_video_routes(args, api_key))
+    app.include_router(create_image_routes(args, api_key))
     app.include_router(create_openai_routes(args, api_key))
     return app
 

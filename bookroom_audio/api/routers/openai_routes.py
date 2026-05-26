@@ -8,6 +8,7 @@ OpenAI 兼容 API 路由模块。
 - POST /v1/audio/translations - 音频翻译（兼容 OpenAI Whisper API）
 - POST /v1/audio/speech - 文字转语音（兼容 OpenAI TTS API）
 - POST /v1/video/analyze - 视频分析（自定义扩展）
+- POST /v1/image/analyze - 图片分析（自定义扩展）
 
 参考文档：
 - https://platform.openai.com/docs/api-reference/audio
@@ -467,6 +468,120 @@ def create_openai_routes(args: Any, api_key: Optional[str] = None):
 
         except Exception as e:
             logger.error(f"Video analysis error: {e}", exc_info=True)
+            raise HTTPException(status_code=500, detail=str(e))
+
+    @router.post(
+        "/image/analyze",
+        dependencies=[Depends(optional_api_key)],
+        operation_id="openai_analyze_image",
+        summary="Analyze image",
+        description="""
+图片内容分析。自定义扩展接口，支持图片识别、评分和内容监测。
+
+请求参数：
+- file: 图片文件（必填）
+- task: 分析任务类型（可选）
+- model: 模型名称（可选）
+
+支持的任务类型：
+- recognize: 识别图片内容
+- score: 图片内容评分
+- moderate: 图片内容监测（违规检测）
+
+支持的模型：
+- qwen-vl-4b: Qwen3-VL-4B 模型（默认）
+- qwen-vl-8b: Qwen3-VL-8B 模型
+
+支持的图片格式：JPEG, PNG, GIF, BMP, WebP
+        """,
+        responses={
+            200: {
+                "description": "分析成功",
+                "content": {
+                    "application/json": {
+                        "example": {
+                            "task": "recognize",
+                            "summary": "图片内容摘要",
+                            "description": "详细描述..."
+                        }
+                    }
+                }
+            }
+        },
+    )
+    async def analyze_image(
+        file: UploadFile = File(..., description="要分析的图片文件"),
+        task: Optional[str] = Body("recognize", description="分析任务类型"),
+        model: Optional[str] = Body("qwen-vl-4b", description="模型名称"),
+    ):
+        """
+        图片分析 - 自定义扩展接口
+        
+        Args:
+            file: 图片文件
+            task: 分析任务类型
+            model: 模型名称
+        
+        Returns:
+            分析结果
+        """
+        try:
+            from bookroom_audio.models.qwen_vl import (
+                recognize_image,
+                score_image,
+                moderate_image,
+                load_model_task,
+            )
+
+            # 验证文件格式
+            original_filename = file.filename or "image.jpg"
+            suffix = os.path.splitext(original_filename)[1].lower()
+            supported_formats = [".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp"]
+            if suffix not in supported_formats:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Unsupported image format: {suffix}. Supported: {supported_formats}"
+                )
+
+            file_path = await _save_upload_file(file)
+
+            model_map = {
+                "qwen-vl-2b": "tiny",
+                "qwen-vl-4b": "medium",
+                "qwen-vl-8b": "large",
+            }
+            model_size = model_map.get(model, "medium")
+
+            from dataclasses import dataclass, field
+
+            @dataclass
+            class MockModelConfig:
+                device: str = "cpu"
+                vl_model: str = model_size
+
+            @dataclass
+            class MockArgs:
+                model: MockModelConfig = field(default_factory=MockModelConfig)
+
+            await load_model_task(MockArgs(), {"model_size": model_size})
+
+            if task == "recognize":
+                result = await recognize_image(file_path, MockArgs())
+            elif task == "score":
+                result = await score_image(file_path, MockArgs())
+            elif task == "moderate":
+                result = await moderate_image(file_path, MockArgs())
+            else:
+                result = await recognize_image(file_path, MockArgs())
+
+            os.remove(file_path)
+
+            return result
+
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"Image analysis error: {e}", exc_info=True)
             raise HTTPException(status_code=500, detail=str(e))
 
     return router
