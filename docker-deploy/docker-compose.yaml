@@ -30,6 +30,7 @@ services:
       CACHE_DIR: ${CACHE_DIR:-./.cache}
       LOCAL_FILES_ONLY: ${LOCAL_FILES_ONLY:-false}
       HF_ENDPOINT: ${HF_ENDPOINT:-https://www.modelscope.cn}
+      MODELSCOPE_ENDPOINT: ${MODELSCOPE_ENDPOINT:-https://www.modelscope.cn}
     ports:
       - "${EXPOSE_PORT:-15231}:${PORT:-15231}"
     networks:

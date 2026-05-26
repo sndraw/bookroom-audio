@@ -387,21 +387,20 @@ def generate_audio_chatt(
             except ValueError:
                 voice_num = 0
     
-    # 设置情感参数
-    params_infer_code = {
-        "spk_emb": None,  # 使用默认语音
-        "temperature": 0.3,
-        "top_k": 20,
-        "top_p": 0.8,
-    }
+    # 使用 ChatTTS 提供的参数类
+    params_infer_code = model.InferCodeParams()
+    params_infer_code.spk_emb = None  # 使用默认语音
+    params_infer_code.temperature = 0.3
+    params_infer_code.top_k = 20
+    params_infer_code.top_p = 0.8
     
     # 添加情感控制
     if emotion == "happy":
-        params_infer_code["temperature"] = 0.5
+        params_infer_code.temperature = 0.5
     elif emotion == "sad":
-        params_infer_code["temperature"] = 0.1
+        params_infer_code.temperature = 0.1
     elif emotion == "angry":
-        params_infer_code["temperature"] = 0.7
+        params_infer_code.temperature = 0.7
     
     # 生成音频
     audio_data = model.infer(
@@ -413,9 +412,13 @@ def generate_audio_chatt(
     # 获取音频数据
     wav_data = audio_data[0]
     
+    # 将 float32 转换为 int16
+    import numpy as np
+    wav_data_int16 = (wav_data * 32767).astype(np.int16)
+    
     # 转换采样率
     audio = AudioSegment(
-        data=wav_data.tobytes(),
+        data=wav_data_int16.tobytes(),
         sample_width=2,
         frame_rate=24000,
         channels=1
