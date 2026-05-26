@@ -264,31 +264,55 @@ def _get_chattss_model():
                     config = get_config()
                     cache_dir = config.cache.cache_dir
                     
-                    # 设置Hugging Face缓存环境变量，确保ChatTTS模型下载到统一目录
+                    # 设置本地文件优先（必须在导入ChatTTS之前设置）
+                    os.environ["HF_HUB_OFFLINE"] = "1" if config.cache.local_files_only else "0"
                     os.environ["TRANSFORMERS_CACHE"] = cache_dir
                     os.environ["HF_HOME"] = cache_dir
                     os.environ["HUGGINGFACE_HUB_CACHE"] = cache_dir
                     
+                    logger.info(f"Local files only mode: {config.cache.local_files_only}")
+                    logger.info(f"HF_HUB_OFFLINE: {os.environ.get('HF_HUB_OFFLINE')}")
                     logger.info(f"ChatTTS model cache directory: {cache_dir}")
+                    
+                    # 检查模型文件是否存在
+                    model_status = _check_chattss_model_files()
+                    logger.info(f"Model files status: {'complete' if model_status['complete'] else 'incomplete'}")
+                    if not model_status['complete']:
+                        logger.warning(f"Missing model files: {model_status['missing']}")
                     
                     # 延迟导入 ChatTTS
                     import ChatTTS
                     _chattts_model = ChatTTS.Chat()
                     
                     # 使用 Hugging Face 源加载模型
-                    logger.info("Loading ChatTTS model...")
-                    # 设置本地文件优先
-                    os.environ["HF_HUB_OFFLINE"] = "1" if config.cache.local_files_only else "0"
+                    logger.info("Loading ChatTTS model components...")
                     
-                    success = _chattts_model.load(
-                        source="huggingface",
-                        compile=False
-                    )
+                    try:
+                        success = _chattts_model.load(
+                            source="huggingface",
+                            compile=False
+                        )
+                    except Exception as load_error:
+                        logger.error(f"ChatTTS load() failed with exception: {load_error}", exc_info=True)
+                        success = False
                     
+                    # 检查组件是否真正加载成功
                     if success:
+                        logger.info(f"ChatTTS components status: vocos={_chattts_model.vocos is not None}, gpt={_chattts_model.gpt is not None}, tokenizer={_chattts_model.tokenizer is not None}, embed={_chattts_model.embed is not None}, decoder={_chattts_model.decoder is not None}")
+                        if not _chattts_model.has_loaded():
+                            logger.warning("ChatTTS load() returned True but components not properly initialized")
+                            # 尝试重新加载
+                            logger.info("Attempting to reload ChatTTS model...")
+                            _chattts_model.clear()
+                            success = _chattts_model.load(
+                                source="huggingface",
+                                compile=False
+                            )
+                    
+                    if success and _chattts_model.has_loaded():
                         logger.info("ChatTTS model loaded successfully!")
                     else:
-                        logger.error("Failed to load ChatTTS model")
+                        logger.error("Failed to load ChatTTS model - components not initialized")
                         _chattts_model = None
                     
                 except Exception as e:

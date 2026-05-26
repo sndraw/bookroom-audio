@@ -25,6 +25,7 @@ from bookroom_audio.api.routers.tts.utils import select_engine
 from bookroom_audio.api.routers.tts.engines import (
     _check_chattss_available,
     _get_chattss_status,
+    _get_chattss_model,
     generate_audio_chatt,
     generate_audio_edge_tts,
     generate_audio_pyttsx3,
@@ -189,5 +190,38 @@ def create_tts_routes(args: Any, api_key: Optional[str] = None):
             result["available_engines"].append("pyttsx3")
 
         return result
+
+    @router.post(
+        "/load",
+        dependencies=[Depends(optional_api_key)],
+        summary="Load ChatTTS model",
+        description="Manually trigger loading of the ChatTTS model. Useful if the model failed to load on startup.",
+        operation_id="load_chattss_model",
+    )
+    async def load_chattss_model():
+        try:
+            logger.info("Manual loading of ChatTTS model requested")
+            model = await asyncio.to_thread(_get_chattss_model)
+            
+            if model is not None:
+                status = _get_chattss_status()
+                return {
+                    "success": True,
+                    "message": "ChatTTS model loaded successfully",
+                    "status": status,
+                }
+            else:
+                status = _get_chattss_status()
+                return {
+                    "success": False,
+                    "message": "Failed to load ChatTTS model",
+                    "status": status,
+                }
+        except Exception as e:
+            logger.error(f"Error loading ChatTTS model: {e}", exc_info=True)
+            return {
+                "success": False,
+                "message": f"Error loading model: {str(e)}",
+            }
 
     return router
