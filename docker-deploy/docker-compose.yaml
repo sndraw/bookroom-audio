@@ -4,7 +4,7 @@ services:
     build: ..
     restart: unless-stopped
     volumes:
-      - ./volumes/bookroom-audio/.cache:/app/.cache
+      - ./.cache:/app/.cache
     environment:
       TZ: ${TZ:-Asia/Shanghai}
       API_KEY: ${API_KEY:-your_api_key_here}
