@@ -12,11 +12,13 @@ BookRoom Audio API - 提供完整的语音合成(TTS)、语音识别(ASR)、视�
 - 支持语音转文字和翻译功能
 
 🔊 **语音合成 (TTS)**
-- 支持 ChatTTS 模型
-- 支持 MeloTTS 模型
-- 支持多种语音和情感选择
-- 支持中文、英文、日文等多种语言
-- 支持流式音频输出
+- 支持 ChatTTS 模型（高质量中文离线TTS）
+- 支持 Edge TTS（基于Azure的在线TTS服务）
+- 支持 pyttsx3（本地离线TTS引擎）
+- 支持多种语音选择（male/female/neutral）
+- 支持情感控制（happy/sad/angry/neutral）
+- 支持中文语音合成
+- 支持离线运行（ChatTTS/pyttsx3）
 
 🎬 **视频分析 (VL)**
 - 支持 Qwen3-VL 模型 (2B/4B/8B参数)
