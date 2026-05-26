@@ -119,7 +119,7 @@ deactivate
 # Make sure git-lfs is installed (https://git-lfs.com)
 git lfs install
 
-git clone https://hf-mirror.com/openai/faster-whisper-large-v3
+git clone https://www.modelscope.cn/models/iic/Whisper-large-v3
 ```
 ### **国际模型仓库下载**
 ```bash
@@ -143,7 +143,7 @@ MODEL_KEEP_ALIVE=5m # 模型保持时间，默认为5分钟，如果为-1则为�
 NUM_WORKERS=1 # 工作线程数，默认为1个
 DOWNLOAD_ROOT=./cache # 下载模型等文件的缓存路径
 LOCAL_FILES_ONLY=true # 是否只使用本地文件，不从网络下载，默认为true
-HF_ENDPOINT=https://hf-mirror.com # 模型仓库地址，默认为 https://huggingface.co
+HF_ENDPOINT=https://www.modelscope.cn # 模型仓库地址，默认为 https://huggingface.co
 ```
 
 

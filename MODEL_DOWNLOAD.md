@@ -7,14 +7,14 @@
 ## ChatTTS 模型下载
 
 ### 下载地址
-ChatTTS 模型官方仓库：https://hf-mirror.com/2Noise/ChatTTS/tree/main
+ChatTTS 模型官方仓库：https://www.modelscope.cn/2Noise/ChatTTS/tree/main
 
 ### 推荐下载方法
 
 #### 方法1：使用 huggingface-cli（推荐）
 ```bash
 cd bookroom-audio
-HF_ENDPOINT=https://hf-mirror.com huggingface-cli download 2Noise/ChatTTS
+HF_ENDPOINT=https://www.modelscope.cn huggingface-cli download 2Noise/ChatTTS
 ```
 
 模型会自动下载到 `.cache/models--2Noise--ChatTTS/` 目录。
@@ -22,7 +22,7 @@ HF_ENDPOINT=https://hf-mirror.com huggingface-cli download 2Noise/ChatTTS
 #### 方法2：使用 git clone（需要 git-lfs）
 ```bash
 git lfs install
-git clone https://hf-mirror.com/2Noise/ChatTTS
+git clone https://www.modelscope.cn/2Noise/ChatTTS
 mv ChatTTS/* bookroom-audio/.cache/models--2Noise--ChatTTS/
 ```
 
@@ -46,32 +46,32 @@ ls -la ./.cache/models--2Noise--ChatTTS/snapshots/*/asset/
 ### MeloTTS 系列
 ```bash
 # 中文模型
-HF_ENDPOINT=https://hf-mirror.com huggingface-cli download myshell-ai/MeloTTS-Chinese
+HF_ENDPOINT=https://www.modelscope.cn huggingface-cli download myshell-ai/MeloTTS-Chinese
 
 # 英文模型
-HF_ENDPOINT=https://hf-mirror.com huggingface-cli download myshell-ai/MeloTTS-English
+HF_ENDPOINT=https://www.modelscope.cn huggingface-cli download myshell-ai/MeloTTS-English
 
 # 日语模型
-HF_ENDPOINT=https://hf-mirror.com huggingface-cli download myshell-ai/MeloTTS-Japanese
+HF_ENDPOINT=https://www.modelscope.cn huggingface-cli download myshell-ai/MeloTTS-Japanese
 ```
 
 ## ASR 模型
 
 ### Qwen3-ASR
 ```bash
-HF_ENDPOINT=https://hf-mirror.com huggingface-cli download Qwen/Qwen3-ASR-1.7B
+HF_ENDPOINT=https://www.modelscope.cn huggingface-cli download Qwen/Qwen3-ASR-1.7B
 ```
 
 ### Whisper 系列
 ```bash
 # Base 模型
-HF_ENDPOINT=https://hf-mirror.com huggingface-cli download Systran/faster-whisper-base
+HF_ENDPOINT=https://www.modelscope.cn huggingface-cli download Systran/faster-whisper-base
 
 # Medium 模型
-HF_ENDPOINT=https://hf-mirror.com huggingface-cli download Systran/faster-whisper-medium
+HF_ENDPOINT=https://www.modelscope.cn huggingface-cli download Systran/faster-whisper-medium
 
 # Large-v3 模型
-HF_ENDPOINT=https://hf-mirror.com huggingface-cli download Systran/faster-whisper-large-v3
+HF_ENDPOINT=https://www.modelscope.cn huggingface-cli download Systran/faster-whisper-large-v3
 ```
 
 ## 环境变量配置
@@ -94,7 +94,7 @@ NUM_WORKERS=4
 # 缓存配置（统一管理所有模型）
 CACHE_DIR=./.cache
 LOCAL_FILES_ONLY=False
-HF_ENDPOINT=https://hf-mirror.com
+HF_ENDPOINT=https://www.modelscope.cn
 ```
 
 ### 命令行参数

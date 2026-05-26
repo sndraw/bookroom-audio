@@ -34,7 +34,7 @@ NUM_WORKERS=4
 # 缓存配置
 CACHE_DIR=./.cache
 LOCAL_FILES_ONLY=False
-HF_ENDPOINT=https://hf-mirror.com
+HF_ENDPOINT=https://www.modelscope.cn
 ```
 
 ### 命令行参数
@@ -100,7 +100,7 @@ python -m bookroom_audio.server \
 | `local_files_only` | bool | `true` | 仅使用本地文件 |
 | `transformers_offline` | bool | `true` | Transformers离线模式 |
 | `hf_datasets_offline` | bool | `true` | HF数据集离线模式 |
-| `hf_endpoint` | str | `"https://hf-mirror.com"` | Hugging Face镜像 |
+| `hf_endpoint` | str | `"https://www.modelscope.cn"` | Hugging Face镜像 |
 | `model_source` | str | `"huggingface"` | 模型源 |
 
 ## 使用示例
@@ -142,7 +142,7 @@ export CACHE_DIR=/path/to/cache
 export LOCAL_FILES_ONLY=true
 
 # 设置Hugging Face镜像
-export HF_ENDPOINT=https://hf-mirror.com
+export HF_ENDPOINT=https://www.modelscope.cn
 ```
 
 ## 离线模式
@@ -222,7 +222,7 @@ python -m bookroom_audio.server --cache-dir /custom/cache/path
   - Local Files Only: True
   - Transformers Offline: True
   - HF Datasets Offline: True
-  - HF Endpoint: https://hf-mirror.com
+  - HF Endpoint: https://www.modelscope.cn
   - Model Source: huggingface
 ============================================================
 ```

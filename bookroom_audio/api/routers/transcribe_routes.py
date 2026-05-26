@@ -69,7 +69,7 @@ def create_transcribe_routes(args: Any, api_key: Optional[str] = None):
         Internal helper to process audio files for transcription or translation.
         """
         try:
-            selected_engine = engine or args.engine or "whisper"
+            selected_engine = engine or args.model.asr_engine or "whisper"
             
             if selected_engine not in SUPPORTED_ENGINES:
                 raise HTTPException(
@@ -93,11 +93,22 @@ def create_transcribe_routes(args: Any, api_key: Optional[str] = None):
                     )
                 
                 from bookroom_audio.models.qwen_asr import load_model_task as qwen_load_model
-                final_model = model or "Qwen/Qwen3-ASR-1.7B"
+                
+                # 模型名称映射
+                model_mapping = {
+                    "small": "Qwen/Qwen3-ASR-1.7B",
+                    "medium": "Qwen/Qwen3-ASR-1.7B",
+                    "large": "Qwen/Qwen3-ASR-1.7B",
+                }
+                
+                # 获取实际的模型名称
+                raw_model = model or args.model.asr_model or "medium"
+                final_model = model_mapping.get(raw_model, raw_model)
+                
                 params = dict(
                     audio=file,
                     model_size_or_path=final_model,
-                    language=language or args.model.language,
+                    language=language or args.model.asr_language,
                     task=task,
                 )
                 results = await qwen_load_model(args, params)

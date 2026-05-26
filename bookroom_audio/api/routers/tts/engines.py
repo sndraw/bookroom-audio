@@ -210,7 +210,7 @@ def _check_chattss_model_files() -> dict:
     existing_files = []
     
     # 获取环境变量配置的模型下载端点
-    hf_endpoint = os.getenv("HF_ENDPOINT", "https://hf-mirror.com")
+    hf_endpoint = os.getenv("HF_ENDPOINT", "https://www.modelscope.cn")
     modelscope_endpoint = os.getenv("MODELSCOPE_ENDPOINT", "https://www.modelscope.cn")
     
     # 根据配置选择下载端点
