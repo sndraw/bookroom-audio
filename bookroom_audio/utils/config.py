@@ -50,6 +50,10 @@ class ModelConfig:
     tts_engine: str = "chattts"
     tts_language: str = "zh"
     
+    # VL (Vision-Language) 配置
+    vl_model: str = "medium"
+    vl_frame_interval: int = 10
+    
     # 通用配置
     device: str = "cpu"
     compute_type: str = "int8"
@@ -84,6 +88,10 @@ class ModelConfig:
             # TTS 配置
             tts_engine=os.getenv("TTS_ENGINE", "chattts"),
             tts_language=os.getenv("TTS_LANGUAGE", "zh"),
+            
+            # VL 配置
+            vl_model=os.getenv("VL_MODEL", "medium"),
+            vl_frame_interval=int(os.getenv("VL_FRAME_INTERVAL", "10")),
             
             # 通用配置
             device=os.getenv("DEVICE", "cpu"),
@@ -237,6 +245,10 @@ class AppConfig:
             self.model.asr_model = args.model
         if args.language is not None:
             self.model.asr_language = args.language
+        if hasattr(args, 'vl_model') and args.vl_model is not None:
+            self.model.vl_model = args.vl_model
+        if hasattr(args, 'vl_frame_interval') and args.vl_frame_interval is not None:
+            self.model.vl_frame_interval = args.vl_frame_interval
         if args.device is not None:
             self.model.device = args.device
         if args.compute_type is not None:
@@ -308,6 +320,8 @@ def print_config_summary():
     print(f"  - ASR Language: {config.model.asr_language}")
     print(f"  - TTS Engine: {config.model.tts_engine}")
     print(f"  - TTS Language: {config.model.tts_language}")
+    print(f"  - VL Model: {config.model.vl_model}")
+    print(f"  - VL Frame Interval: {config.model.vl_frame_interval}s")
     print(f"  - Device: {config.model.device}")
     print(f"  - Compute Type: {config.model.compute_type}")
     print(f"  - Model Keep Alive: {config.model.model_keep_alive}")

@@ -11,12 +11,14 @@ from fastapi.responses import JSONResponse
 import uvicorn
 
 from bookroom_audio.models.whisper import (
-    cleanup_model,
+    cleanup_model as cleanup_whisper_model,
     run_model_loaded_process,
 )
 from bookroom_audio.api.routers.server_routes import create_server_routes
 from bookroom_audio.api.routers.transcribe_routes import create_transcribe_routes
 from bookroom_audio.api.routers.tts_routes import create_tts_routes
+from bookroom_audio.api.routers.video_routes import create_video_routes
+from bookroom_audio.api.routers.openai_routes import create_openai_routes
 from bookroom_audio.utils.utils_api import (
     get_cors_origins,
     parse_args,
@@ -73,9 +75,16 @@ def create_app(args) -> FastAPI:
             
             # 在应用关闭时清理模型
             try:
-                await cleanup_model()
+                await cleanup_whisper_model()
             except Exception as e:
-                logger.error(f"Error during model cleanup: {e}")
+                logger.error(f"Error during Whisper model cleanup: {e}")
+            
+            # 清理VL模型
+            try:
+                from bookroom_audio.models.qwen_vl import cleanup_model as cleanup_vl_model
+                await cleanup_vl_model()
+            except Exception as e:
+                logger.error(f"Error during VL model cleanup: {e}")
             
             ASCIIColors.green("\nShutdown completed gracefully. Goodbye! 👋\n")
 
@@ -91,6 +100,14 @@ def create_app(args) -> FastAPI:
         {
             "name": "tts",
             "description": "Text-to-Speech (TTS) API routes. Supports ChatTTS and MeloTTS models."
+        },
+        {
+            "name": "video",
+            "description": "Video content analysis and moderation API routes. Supports Qwen3-VL models."
+        },
+        {
+            "name": "openai-compatible",
+            "description": "OpenAI-compatible API routes. Supports audio transcription, translation, speech synthesis, and video analysis."
         },
     ]
     app = FastAPI(
@@ -148,6 +165,8 @@ def create_app(args) -> FastAPI:
     app.include_router(create_transcribe_routes(args, api_key))
     app.include_router(create_server_routes(args, api_key))
     app.include_router(create_tts_routes(args, api_key))
+    app.include_router(create_video_routes(args, api_key))
+    app.include_router(create_openai_routes(args, api_key))
     return app
 
 args = parse_args()

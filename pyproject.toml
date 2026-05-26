@@ -1,7 +1,7 @@
 [project]
 name = "bookroom-audio"
 version = "0.0.5"
-description = "API for translating audio to text using a speech recognition model."
+description = "API for audio transcription, text-to-speech, and video content analysis using AI models."
 readme = "README.md"
 requires-python = ">=3.11"
 authors = [
@@ -27,6 +27,9 @@ dependencies = [
     "torchvision>=0.21.0",
     "uvicorn>=0.34.0",
     "vector-quantize-pytorch>=1.29.1",
+    "transformers>=4.45.0",
+    "accelerate>=0.34.0",
+    "pillow>=10.0.0",
 ]
 
 [tool.setuptools.packages.find]
