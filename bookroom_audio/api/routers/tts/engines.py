@@ -253,6 +253,7 @@ def _check_chattss_model_files() -> dict:
 def _get_chattss_model():
     """获取或加载 ChatTTS 模型"""
     global _chattts_model
+    import os
     
     if _chattts_model is None:
         with _chattts_lock:
@@ -287,10 +288,15 @@ def _get_chattss_model():
                     # 使用 Hugging Face 源加载模型
                     logger.info("Loading ChatTTS model components...")
                     
+                    # 构建模型路径，ChatTTS 期望模型在 {custom_path}/models--2Noise--ChatTTS/snapshots/ 目录下
+                    chattts_model_dir = os.path.join(cache_dir, "models--2Noise--ChatTTS")
+                    logger.info(f"ChatTTS model directory: {chattts_model_dir}")
+                    
                     try:
                         success = _chattts_model.load(
                             source="huggingface",
-                            compile=False
+                            compile=False,
+                            custom_path=cache_dir
                         )
                     except Exception as load_error:
                         logger.error(f"ChatTTS load() failed with exception: {load_error}", exc_info=True)
@@ -382,8 +388,17 @@ def generate_audio_chatt(
         import ChatTTS
         _chattts_model = ChatTTS.Chat()
         
+        # 获取缓存目录配置
+        from bookroom_audio.utils.config import get_config
+        config = get_config()
+        cache_dir = config.cache.cache_dir
+        
         try:
-            success = _chattts_model.load(source="huggingface", compile=False)
+            success = _chattts_model.load(
+                source="huggingface", 
+                compile=False,
+                custom_path=cache_dir
+            )
             if success and _chattts_model.has_loaded():
                 logger.info("ChatTTS model loaded successfully!")
                 model = _chattts_model
