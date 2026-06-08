@@ -14,8 +14,6 @@ from bookroom_audio.utils.utils_api import (
     logger,
 )
 
-router = APIRouter(prefix="/v1/audio", tags=["transcribe"])
-
 SUPPORTED_MODELS = {
     "tiny.en", "tiny", "base.en", "base", "small.en", "small",
     "medium.en", "medium", "large-v1", "large-v2", "large-v3", "large",
@@ -57,6 +55,8 @@ def get_available_engines() -> dict:
 
 
 def create_transcribe_routes(args: Any, api_key: Optional[str] = None):
+    router = APIRouter(prefix="/v1/audio", tags=["transcribe"])
+    
     """
     Creates and registers the transcription and translation routes.
     """

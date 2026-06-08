@@ -34,10 +34,8 @@ from bookroom_audio.api.routers.tts.engines import (
 )
 
 
-router = APIRouter(prefix="/v1/tts", tags=["tts"])
-
-
 def create_tts_routes(args: Any, api_key: Optional[str] = None):
+    router = APIRouter(prefix="/v1/tts", tags=["tts"])
     """
     创建TTS路由。
     

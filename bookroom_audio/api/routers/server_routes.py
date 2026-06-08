@@ -10,9 +10,6 @@ from pydantic import BaseModel
 from bookroom_audio.utils.utils_api import get_api_key_dependency
 
 
-router = APIRouter(tags=["server"])
-
-
 class ServerResponse(BaseModel):
     """Server response model."""
 
@@ -21,7 +18,8 @@ class ServerResponse(BaseModel):
 
 
 def create_server_routes(args: Any, api_key: Optional[str] = None):
-    # Create the optional API key dependency
+    router = APIRouter(tags=["server"])
+    
     optional_api_key = get_api_key_dependency(api_key)
 
     @router.get("/health", response_model=ServerResponse, operation_id="get_status_health")

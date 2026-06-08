@@ -28,17 +28,6 @@ from bookroom_audio.utils.utils_api import (
     logger,
 )
 
-router = APIRouter(
-    prefix="/v1/video",
-    tags=["video"],
-    responses={
-        400: {"description": "Invalid request parameters"},
-        401: {"description": "Unauthorized - Invalid API key"},
-        500: {"description": "Internal server error"},
-        503: {"description": "Service unavailable - VL model not available"},
-    },
-)
-
 SUPPORTED_MODELS: Dict[str, Dict[str, Any]] = {
     "tiny": {
         "name": "qwen/Qwen3-VL-2B-Instruct",
@@ -75,6 +64,17 @@ SUPPORTED_TASKS: List[str] = ["recognize", "score", "moderate", "full"]
 
 
 def create_video_routes(args: Any, api_key: Optional[str] = None):
+    router = APIRouter(
+        prefix="/v1/video",
+        tags=["video"],
+        responses={
+            400: {"description": "Invalid request parameters"},
+            401: {"description": "Unauthorized - Invalid API key"},
+            500: {"description": "Internal server error"},
+            503: {"description": "Service unavailable - VL model not available"},
+        },
+    )
+
     optional_api_key = get_api_key_dependency(api_key)
 
     async def _process_video_task(
