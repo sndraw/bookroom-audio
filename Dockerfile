@@ -15,12 +15,12 @@ RUN apt-get update && \
 # Install uv
 RUN pip install uv
 
-# Copy project files
+# Copy only dependency files first to leverage Docker layer caching
 COPY ./pyproject.toml ./pyproject.toml
 COPY ./uv.lock ./uv.lock
 
-# Let uv handle the Python version and create the environment
-RUN uv sync --no-cache
+# Sync dependencies - packages will be installed in the virtual environment
+RUN uv sync --frozen
 
 # Copy application code
 COPY ./bookroom_audio ./bookroom_audio

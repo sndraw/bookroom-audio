@@ -183,6 +183,26 @@ uv run -m bookroom_audio.server
 uv run -m bookroom_audio.server --reload
 ```
 
+### **Docker Compose 部署（推荐）**
+
+使用 docker-compose 可以更方便地管理服务，并避免每次启动重新下载依赖：
+
+```bash
+# 首次构建并启动
+make rebuild
+
+# 停止服务
+make down
+
+# 启动服务（不会重新构建）
+make up
+
+# 查看日志
+make logs
+```
+
+依赖会在构建时打包到镜像中，容器重启时不会重新下载。
+
 
 ## Docker打包
 ### 1. 登录镜像仓库（可选）
@@ -196,6 +216,27 @@ docker login -u username <IP:port>/<repository>
 ```bash
 make build-push-all REGISTRY_URL=<IP:port>/<repository> IMAGE_NAME=sndraw/bookroom-audio IMAGE_VERSION=0.0.1
 ```
+
+### 3. Docker Compose 部署（推荐）
+
+项目提供了 docker-compose.yml 配置文件，可以更方便地管理服务：
+
+```bash
+# 首次构建并启动（依赖会打包到镜像中）
+make rebuild
+
+# 之后重启不会重新下载依赖
+make down
+make up
+
+# 查看实时日志
+make logs
+```
+
+**优势**：
+- 依赖在构建时打包到镜像中，容器重启时不会重新下载
+- 利用 Docker 层缓存，代码修改后构建速度更快
+- 统一管理容器生命周期
 
 ## 截图展示
 ### 接口配置

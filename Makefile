@@ -35,6 +35,28 @@ run-image:
 	docker run -d --name $(CONTAINER_NAME) -p 8080:80 $(IMAGE_NAME):$(IMAGE_VERSION) || $(call check_error,"run-image")
 	@echo "Web Docker container running successfully: $(CONTAINER_NAME)"
 
+# 使用 docker-compose 启动（推荐，支持缓存挂载）
+up:
+	@echo "Starting bookroom-audio with docker-compose..."
+	docker compose up -d || $(call check_error,"docker-compose-up")
+	@echo "bookroom-audio started successfully"
+
+# 使用 docker-compose 停止
+down:
+	@echo "Stopping bookroom-audio with docker-compose..."
+	docker compose down || $(call check_error,"docker-compose-down")
+	@echo "bookroom-audio stopped successfully"
+
+# 查看日志
+logs:
+	docker compose logs -f
+
+# 重建并启动
+rebuild:
+	@echo "Rebuilding and starting bookroom-audio..."
+	docker compose up -d --build || (echo "Warning: docker compose returned non-zero exit code, checking container status..." && docker ps | grep bookroom-audio && echo "Container is running")
+	@echo "bookroom-audio rebuilt and started successfully"
+
 # 停止并清理Docker容器和镜像
 clean-image:
 	@echo "Cleaning web Docker container and image..."

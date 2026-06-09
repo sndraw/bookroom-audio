@@ -20,5 +20,6 @@ echo "  - DEVICE: ${DEVICE:-auto}"
 echo "  - COMPUTE_TYPE: ${COMPUTE_TYPE:-float16}"
 echo "  - NUM_WORKERS: ${NUM_WORKERS:-2}"
 
-# Use uv run to activate the virtual environment and run the server
-uv run python -m bookroom_audio.server
+# Activate virtual environment and run server
+source .venv/bin/activate
+python -m bookroom_audio.server

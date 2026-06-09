@@ -6,6 +6,51 @@ import re
 from typing import Any
 
 
+# ChatTTS 允许的字符模式：中文、英文、允许的中文标点、允许的英文标点、空格
+CHATTTS_ALLOWED_PATTERN = re.compile(r'[^\u4e00-\u9fffA-Za-z，。、,\. \'"\"":;!?()\[\]<>~-]')
+
+# 中文标点到英文标点的映射（用于 ChatTTS 文本规范化）
+CHINESE_TO_ENGLISH_PUNCTUATION = {
+    '！': '!',
+    '？': '?',
+    '：': ':',
+    '；': ';',
+    '（': '(',
+    '）': ')',
+    '【': '[',
+    '】': ']',
+    '「': '"',
+    '」': '"',
+    '『': '"',
+    '』': '"',
+    '《': '<',
+    '》': '>',
+    '－': '-',
+    '…': '...',
+    '～': '~',
+}
+
+
+def preprocess_text_for_chattts(text: str) -> str:
+    """
+    为 ChatTTS 预处理文本，替换或移除可能导致警告的无效字符。
+    
+    Args:
+        text: 原始文本
+        
+    Returns:
+        处理后的文本
+    """
+    # 替换中文标点为对应的英文标点
+    for chinese_char, english_char in CHINESE_TO_ENGLISH_PUNCTUATION.items():
+        text = text.replace(chinese_char, english_char)
+    
+    # 移除其他不允许的字符（保留中文、英文、允许的标点、空格）
+    text = CHATTTS_ALLOWED_PATTERN.sub('', text)
+    
+    return text
+
+
 def detect_language(text: str) -> str:
     """
     检测文本语言。

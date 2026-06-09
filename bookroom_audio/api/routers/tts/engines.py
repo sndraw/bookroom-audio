@@ -371,6 +371,10 @@ def generate_audio_chatt(
         WAV格式的音频数据
     """
     from bookroom_audio.api.routers.tts.constants import CHATTTS_VOICES, CHATTTS_EMOTIONS
+    from bookroom_audio.api.routers.tts.utils import preprocess_text_for_chattts
+    
+    # 预处理文本，移除可能导致警告的无效字符
+    text = preprocess_text_for_chattts(text)
     
     model = _get_chattss_model()
     

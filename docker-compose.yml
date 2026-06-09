@@ -1,0 +1,18 @@
+version: '3.8'
+
+services:
+  bookroom-audio:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: bookroom-audio
+    ports:
+      - "${EXPOSE_PORT:-15231}:15231"
+    env_file:
+      - .env
+    volumes:
+      # 挂载缓存目录，避免每次重启都重新下载依赖
+      - ./docker-deploy/.cache:/app/.cache
+      # 如果需要持久化模型文件，可以挂载 CACHE_DIR
+      - ${CACHE_DIR:-./docker-deploy/.cache}:/app/models-cache
+    restart: unless-stopped
