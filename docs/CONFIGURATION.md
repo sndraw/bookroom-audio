@@ -37,6 +37,21 @@ LOCAL_FILES_ONLY=False
 HF_ENDPOINT=https://www.modelscope.cn
 ```
 
+### Docker 部署配置
+
+```bash
+# docker-deploy/.env 文件
+# 缓存配置（容器内绝对路径）
+CACHE_DIR=/app/.cache
+LOCAL_FILES_ONLY=False
+HF_ENDPOINT=https://www.modelscope.cn
+```
+
+**注意事项**：
+- Docker 容器内必须使用绝对路径（如 `/app/.cache`）
+- 不能使用相对路径（如 `./.cache`），因为容器工作目录是 `/app`
+- Volume 挂载：`./.cache:/app/.cache`（宿主机相对路径:容器绝对路径）
+
 ### 命令行参数
 
 ```bash

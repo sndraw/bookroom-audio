@@ -27,7 +27,7 @@ services:
       COMPUTE_TYPE: ${COMPUTE_TYPE:-float16}
       MODEL_KEEP_ALIVE: ${MODEL_KEEP_ALIVE:-5m}
       NUM_WORKERS: ${NUM_WORKERS:-2}
-      CACHE_DIR: ${CACHE_DIR:-./.cache}
+      CACHE_DIR: ${CACHE_DIR:-/app/.cache}
       LOCAL_FILES_ONLY: ${LOCAL_FILES_ONLY:-false}
       HF_ENDPOINT: ${HF_ENDPOINT:-https://www.modelscope.cn}
       MODELSCOPE_ENDPOINT: ${MODELSCOPE_ENDPOINT:-https://www.modelscope.cn}
