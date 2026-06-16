@@ -6,29 +6,57 @@ import re
 from typing import Any
 
 
-# ChatTTS 允许的字符模式：中文、英文、允许的中文标点、允许的英文标点、空格
-CHATTTS_ALLOWED_PATTERN = re.compile(r'[^\u4e00-\u9fffA-Za-z，。、,\. \'"\"":;!?()\[\]<>~-]')
-
-# 中文标点到英文标点的映射（用于 ChatTTS 文本规范化）
-CHINESE_TO_ENGLISH_PUNCTUATION = {
-    '！': '!',
-    '？': '?',
-    '：': ':',
-    '；': ';',
-    '（': '(',
-    '）': ')',
-    '【': '[',
-    '】': ']',
-    '「': '"',
-    '」': '"',
-    '『': '"',
-    '』': '"',
-    '《': '<',
-    '》': '>',
-    '－': '-',
-    '…': '...',
-    '～': '~',
+# 全角标点 -> 半角标点 的映射表（ChatTTS 只接受 ASCII/中文常见符号，
+# 遇到其他全角符号会打印 "found invalid characters" 警告，这里提前规范化）
+_FULLWIDTH_PUNCTUATION_MAP: dict[str, str] = {
+    # 常用全角标点
+    '！': '!', '？': '?', '：': ':', '；': ';',
+    '（': '(', '）': ')', '【': '[', '】': ']',
+    '《': '<', '》': '>', '｛': '{', '｝': '}',
+    '「': '"', '」': '"', '『': '"', '』': '"',
+    '〈': '<', '〉': '>', '〔': '(', '〕': ')',
+    '—': '-', '－': '-', '–': '-', '−': '-',
+    '…': '...', '⋯': '...',
+    '～': '~', '·': ',', '•': ',',
+    '、': ',', '，': ',', '。': '.',
+    '“': '"', '”': '"', '‘': "'", '’': "'",
+    '〝': '"', '〟': '"',
+    '／': '/', '＼': '\\',
+    '＋': '+', '＝': '=', '％': '%', '＃': '#',
+    '＆': '&', '＊': '*', '＠': '@',
+    '＜': '<', '＞': '>',
+    '｜': '|', '＾': '^', '＿': '_',
+    '＃': '#', '＄': '$', '％': '%',
 }
+
+# ChatTTS 允许的字符模式：中文 \u4e00-\u9fff、ASCII 英文字母数字、
+# 常用 ASCII 标点、空格。其它字符一律移除，避免 ChatTTS 内部发出警告。
+_CHATTTS_ALLOWED_PATTERN = re.compile(
+    r'[^\u4e00-\u9fffA-Za-z0-9，。、,.!?;:"\'()\[\]<>~+\-*/%=&#@ ]'
+)
+
+# 对外暴露（向后兼容）
+CHINESE_TO_ENGLISH_PUNCTUATION = _FULLWIDTH_PUNCTUATION_MAP
+CHATTTS_ALLOWED_PATTERN = _CHATTTS_ALLOWED_PATTERN
+
+
+def _normalize_fullwidth(text: str) -> str:
+    """把全角字符替换为对应半角字符"""
+    result = []
+    for ch in text:
+        mapped = _FULLWIDTH_PUNCTUATION_MAP.get(ch)
+        if mapped is not None:
+            result.append(mapped)
+            continue
+        # 额外处理 Unicode 全角字母数字区：U+FF01..U+FF5E -> ASCII
+        code = ord(ch)
+        if 0xFF01 <= code <= 0xFF5E:
+            result.append(chr(code - 0xFEE0))
+        elif ch == '\u3000':  # 全角空格 -> 半角空格
+            result.append(' ')
+        else:
+            result.append(ch)
+    return ''.join(result)
 
 
 def preprocess_text_for_chattts(text: str) -> str:
@@ -41,13 +69,18 @@ def preprocess_text_for_chattts(text: str) -> str:
     Returns:
         处理后的文本
     """
-    # 替换中文标点为对应的英文标点
-    for chinese_char, english_char in CHINESE_TO_ENGLISH_PUNCTUATION.items():
-        text = text.replace(chinese_char, english_char)
-    
-    # 移除其他不允许的字符（保留中文、英文、允许的标点、空格）
-    text = CHATTTS_ALLOWED_PATTERN.sub('', text)
-    
+    if not text:
+        return text
+
+    # 1) 把全角字符替换为对应半角字符
+    text = _normalize_fullwidth(text)
+
+    # 2) 移除 ChatTTS 不接受的其它字符（保留中文、英文、数字、常用标点、空格）
+    text = _CHATTTS_ALLOWED_PATTERN.sub('', text)
+
+    # 3) 规整空白符：连续空白 / 制表符 / 换行 压缩为单个空格
+    text = re.sub(r'\s+', ' ', text).strip()
+
     return text
 
 

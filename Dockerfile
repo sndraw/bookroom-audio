@@ -12,6 +12,18 @@ RUN apt-get update && \
     git \
     && rm -rf /var/lib/apt/lists/*
 
+# CPU 兼容性环境变量：
+# - PYTORCH_DISABLE_AVX2 / PYTORCH_DISABLE_AVX512_F:
+#   告诉 torch 在运行时动态选择 CPU 指令集，避免在无 AVX2 的机器
+#   上因执行 AVX2 指令而触发 "Illegal instruction" 崩溃。
+# - MAX_ISA / CTRANSLATE2_DISABLE_AVX2: 让 ctranslate2 (faster-whisper)
+#   在不支持 AVX2 的 CPU 上降级到 SSE4 指令集。
+ENV PYTORCH_DISABLE_AVX2=1 \
+    PYTORCH_DISABLE_AVX512_F=1 \
+    MAX_ISA=SSE4 \
+    CTRANSLATE2_DISABLE_AVX2=1 \
+    UV_PYTHON=python
+
 # Install uv
 RUN pip install uv
 

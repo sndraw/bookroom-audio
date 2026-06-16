@@ -8,20 +8,30 @@ services:
     environment:
       TZ: ${TZ:-Asia/Shanghai}
       API_KEY: ${API_KEY:-your_api_key_here}
-      
+
+      # =============================================================
+      # CPU 兼容性配置（关键：解决 "Illegal instruction" 崩溃）
+      # 在老旧 CPU / 部分虚拟化 / 不支持 AVX2 的机器上运行时必须开启。
+      # 如需恢复使用 AVX2 以获得更好性能，设为 0 即可。
+      # =============================================================
+      PYTORCH_DISABLE_AVX2: ${PYTORCH_DISABLE_AVX2:-1}
+      PYTORCH_DISABLE_AVX512_F: ${PYTORCH_DISABLE_AVX512_F:-1}
+      MAX_ISA: ${MAX_ISA:-SSE4}
+      CTRANSLATE2_DISABLE_AVX2: ${CTRANSLATE2_DISABLE_AVX2:-1}
+
       # TTS 配置
       TTS_ENGINE: ${TTS_ENGINE:-chattts}
       TTS_LANGUAGE: ${TTS_LANGUAGE:-zh}
-      
+
       # ASR 配置
       ASR_ENGINE: ${ASR_ENGINE:-qwen-asr}
       ASR_MODEL: ${ASR_MODEL:-medium}
       ASR_LANGUAGE: ${ASR_LANGUAGE:-zh}
-      
+
       # VL (Vision-Language) 配置
       VL_MODEL: ${VL_MODEL:-medium}
       VL_FRAME_INTERVAL: ${VL_FRAME_INTERVAL:-10}
-      
+
       # 通用配置
       DEVICE: ${DEVICE:-auto}
       COMPUTE_TYPE: ${COMPUTE_TYPE:-float16}
