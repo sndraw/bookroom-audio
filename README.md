@@ -64,6 +64,31 @@ const response = await fetch('http://localhost:15231/v1/tts/generate', {
 - 支持多种语言识别
 - 支持音频文件上传和流式识别
 
+### 🌊 实时流式语音识别 (Streaming ASR)
+基于 WebSocket 的实时流式语音识别，支持三种引擎后端可选：
+
+| 引擎 | 类型 | 特点 |
+|------|------|------|
+| `funasr-server` | 远程代理 | 连接外部 FunASR `serve_realtime_ws.py` 服务，原生流式，支持多客户端负载 |
+| `funasr-local` | 进程内 | 基于 FunASR Paraformer-zh-streaming，分块流式，自带 VAD + 标点 |
+| `sensevoice-local` | 进程内 | 基于 SenseVoiceSmall，超快推理，支持情感/事件检测，VAD 模拟流式 |
+
+- 支持 VAD 自动端点检测和句子分割
+- 支持标点恢复、ITN 数字规整
+- 支持热词、说话人分离、情感识别（视引擎能力）
+- 支持 PCM/WAV/MP3 等多种音频格式自动转换
+- WebSocket 协议：START → STARTED → audio frames → PARTIAL/FINAL → STOP → CLOSED
+
+#### WebSocket 端点
+```
+ws://<host>:<port>/v1/audio/streaming/transcriptions?token=<api_key>
+```
+
+#### 查询可用引擎
+```
+GET /v1/audio/streaming/engines
+```
+
 ## 🔧 配置说明
 
 ### 默认配置

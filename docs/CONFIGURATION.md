@@ -32,7 +32,7 @@ MODEL_KEEP_ALIVE=5m
 NUM_WORKERS=4
 
 # 缓存配置
-CACHE_DIR=./.cache
+CACHE_DIR=./docker-deploy/.cache
 LOCAL_FILES_ONLY=False
 HF_ENDPOINT=https://www.modelscope.cn
 ```
@@ -50,7 +50,9 @@ HF_ENDPOINT=https://www.modelscope.cn
 **注意事项**：
 - Docker 容器内必须使用绝对路径（如 `/app/.cache`）
 - 不能使用相对路径（如 `./.cache`），因为容器工作目录是 `/app`
-- Volume 挂载：`./.cache:/app/.cache`（宿主机相对路径:容器绝对路径）
+- Volume 挂载：`./docker-deploy/.cache:/app/.cache`（宿主机相对路径:容器绝对路径）
+- 开发环境默认使用 `./docker-deploy/.cache`，与 Docker 部署共用同一缓存目录，方便模型迁移
+- FunASR/ModelScope 模型会下载到 `$CACHE_DIR/models/iic/` 子目录
 
 ### 命令行参数
 
@@ -96,6 +98,15 @@ python -m bookroom_audio.server \
 | **TTS 配置** | | | |
 | `tts_engine` | str | `"chattts"` | TTS引擎 (chattts, melotts) |
 | `tts_language` | str | `"zh"` | TTS默认语言 |
+| **流式 ASR 配置** | | | |
+| `streaming_asr_engine` | str | `"funasr-local"` | 流式ASR引擎 (funasr-server, funasr-local, sensevoice-local) |
+| `streaming_asr_model` | str | `"paraformer-zh-streaming"` | FunASR 流式模型 |
+| `streaming_vad_model` | str | `"fsmn-vad"` | VAD 端点检测模型 |
+| `streaming_punc_model` | str | `"ct-punc"` | 标点恢复模型 |
+| `streaming_sensevoice_model` | str | `"iic/SenseVoiceSmall"` | SenseVoice 模型（sensevoice-local 引擎使用） |
+| `streaming_enable_punc` | bool | `true` | 是否启用标点恢复 |
+| `streaming_chunk_ms` | int | `600` | 音频分块毫秒数 |
+| `streaming_funasr_server_url` | str | `None` | 外部 FunASR 服务地址（仅 funasr-server 引擎需要，格式 ws://host:port） |
 | **通用配置** | | | |
 | `device` | str | `"cpu"` | 运行设备 (cpu, cuda) |
 | `compute_type` | str | `"int8"` | 计算类型 |

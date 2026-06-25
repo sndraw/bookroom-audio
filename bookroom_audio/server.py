@@ -16,6 +16,7 @@ from bookroom_audio.models.whisper import (
 )
 from bookroom_audio.api.routers.server_routes import create_server_routes
 from bookroom_audio.api.routers.transcribe_routes import create_transcribe_routes
+from bookroom_audio.api.routers.transcribe_streaming import create_streaming_transcribe_routes
 from bookroom_audio.api.routers.tts_routes import create_tts_routes
 from bookroom_audio.api.routers.video_routes import create_video_routes
 from bookroom_audio.api.routers.image_routes import create_image_routes
@@ -80,12 +81,21 @@ def create_app(args) -> FastAPI:
             except Exception as e:
                 logger.error(f"Error during Whisper model cleanup: {e}")
             
-            # 清理VL模型
+            #清理VL模型
             try:
                 from bookroom_audio.models.qwen_vl import cleanup_model as cleanup_vl_model
                 await cleanup_vl_model()
             except Exception as e:
                 logger.error(f"Error during VL model cleanup: {e}")
+            
+            # 清理流式 ASR 后端
+            try:
+                from bookroom_audio.api.routers.transcribe_streaming.engines import (
+                    cleanup_all_backends,
+                )
+                await cleanup_all_backends()
+            except Exception as e:
+                logger.error(f"Error during streaming ASR cleanup: {e}")
             
             ASCIIColors.green("\nShutdown completed gracefully. Goodbye! 👋\n")
 
@@ -97,6 +107,10 @@ def create_app(args) -> FastAPI:
         {
             "name": "transcribe",
             "description": "Speech Recognition (ASR) API routes. Supports Qwen3-ASR and Whisper models."
+        },
+        {
+            "name": "streaming-transcribe",
+            "description": "Real-time streaming Speech Recognition (ASR) via WebSocket. Supports FunASR and SenseVoice engines."
         },
         {
             "name": "tts",
@@ -168,6 +182,7 @@ def create_app(args) -> FastAPI:
         )
 
     app.include_router(create_transcribe_routes(args, api_key))
+    app.include_router(create_streaming_transcribe_routes(args, api_key))
     app.include_router(create_server_routes(args, api_key))
     app.include_router(create_tts_routes(args, api_key))
     app.include_router(create_video_routes(args, api_key))

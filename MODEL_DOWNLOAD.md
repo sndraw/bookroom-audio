@@ -2,7 +2,7 @@
 
 ## 统一缓存目录
 
-所有模型（TTS 和 ASR）现在统一存储在 `.cache` 目录下，便于管理和维护。
+所有模型（TTS 和 ASR）现在统一存储在 `./docker-deploy/.cache` 目录下，便于管理和迁移。开发环境与 Docker 部署使用同一缓存目录，方便模型迁移和共享。
 
 ## 模型下载源配置
 
@@ -156,7 +156,7 @@ MODEL_KEEP_ALIVE=5m
 NUM_WORKERS=4
 
 # 缓存配置（统一管理所有模型）
-CACHE_DIR=./.cache
+CACHE_DIR=./docker-deploy/.cache
 LOCAL_FILES_ONLY=False
 HF_ENDPOINT=https://www.modelscope.cn
 ```
@@ -199,6 +199,88 @@ python -m bookroom_audio.server
 - 模型加载后会缓存在内存中
 - 可通过 `--model-keep-alive` 参数设置缓存时间
 - 默认缓存 5 分钟后自动卸载
+
+## 流式 ASR 模型（FunASR / SenseVoice）
+
+实时流式语音识别支持三种引擎，对应不同的模型下载需求。
+
+### 引擎与模型对应关系
+
+| 引擎 | 需要下载的模型 | 说明 |
+|------|--------------|------|
+| `funasr-server` | 无需下载（代理外部服务） | 外部 FunASR 服务自行管理模型 |
+| `funasr-local` | paraformer-zh-streaming + fsmn-vad + ct-punc | 进程内 FunASR 流式 |
+| `sensevoice-local` | SenseVoiceSmall + fsmn-vad | 进程内 SenseVoice |
+
+### FunASR 流式模型下载
+
+通过 ModelScope（国内推荐）：
+
+```bash
+# 设置环境变量
+export HF_ENDPOINT=https://www.modelscope.cn
+
+# Paraformer-zh-streaming（流式语音识别主模型）
+huggingface-cli download iic/speech_paraformer-large_asr_nat-zh-cn-16k-common-vocab8404-online
+
+# FSMN-VAD（端点检测）
+huggingface-cli download iic/speech_fsmn_vad_zh-cn-16k-common-pytorch
+
+# CT-Punc（标点恢复）
+huggingface-cli download iic/punc_ct-transformer_cn-en-common-vocab471067-large
+```
+
+或在 `.env` 中指定本地模型路径：
+```bash
+STREAMING_ASR_MODEL=/path/to/paraformer-zh-streaming
+STREAMING_VAD_MODEL=/path/to/fsmn-vad
+STREAMING_PUNC_MODEL=/path/to/ct-punc
+```
+
+### SenseVoice 模型下载
+
+```bash
+export HF_ENDPOINT=https://www.modelscope.cn
+
+# SenseVoiceSmall（支持多语言、情感、事件检测）
+huggingface-cli download iic/SenseVoiceSmall
+```
+
+或在 `.env` 中指定：
+```bash
+STREAMING_SENSEVOICE_MODEL=/path/to/SenseVoiceSmall
+```
+
+### FunASR Server 模式（无需下载模型）
+
+如果使用 `funasr-server` 引擎，模型由外部 FunASR 服务管理，本机无需下载：
+
+1. 部署外部 FunASR 服务（参考 [FunASR 官方文档](https://github.com/modelscope/FunASR)）
+2. 启动 `serve_realtime_ws.py` 流式服务
+3. 在 `.env` 中配置服务地址：
+```bash
+STREAMING_ASR_ENGINE=funasr-server
+STREAMING_FUNASR_SERVER_URL=ws://<funasr-host>:<funasr-port>
+```
+
+### 验证流式 ASR 引擎可用性
+
+启动服务后访问引擎列表接口：
+```bash
+curl http://localhost:15231/v1/audio/streaming/engines
+```
+
+返回示例：
+```json
+{
+  "engines": [
+    {"engine": "funasr-server", "available": true, "description": "..."},
+    {"engine": "funasr-local", "available": true, "description": "..."},
+    {"engine": "sensevoice-local", "available": false, "description": "..."}
+  ],
+  "default_engine": "funasr-local"
+}
+```
 
 ## 目录结构
 

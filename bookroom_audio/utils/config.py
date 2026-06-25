@@ -59,6 +59,19 @@ class ModelConfig:
     compute_type: str = "int8"
     model_keep_alive: str = "5m"
     num_workers: int = 1
+
+    # 流式 ASR 配置
+    # 注：模型默认值对应官方简写别名（funasr 自动映射 ModelScope 仓库）
+    # 权威定义见 transcribe_streaming/constants.py 的 DefaultModel 枚举
+    # （此处不直接导入以避免 utils → routers 的循环导入）
+    streaming_asr_engine: str = "funasr-local"
+    streaming_asr_model: str = "paraformer-zh-streaming"
+    streaming_vad_model: str = "fsmn-vad"
+    streaming_punc_model: str = "ct-punc"
+    streaming_sensevoice_model: str = "iic/SenseVoiceSmall"
+    streaming_enable_punc: bool = True
+    streaming_chunk_ms: int = 600
+    streaming_funasr_server_url: Optional[str] = None
     
     # 兼容性：保持旧的engine参数
     @property
@@ -98,6 +111,18 @@ class ModelConfig:
             compute_type=os.getenv("COMPUTE_TYPE", "int8"),
             model_keep_alive=os.getenv("MODEL_KEEP_ALIVE", "5m"),
             num_workers=int(os.getenv("NUM_WORKERS", "1")),
+            
+            # 流式 ASR 配置
+            # 注：模型默认值对应官方简写别名（funasr 自动映射 ModelScope 仓库）
+            # 权威定义见 transcribe_streaming/constants.py 的 DefaultModel 枚举
+            streaming_asr_engine=os.getenv("STREAMING_ASR_ENGINE", "funasr-local"),
+            streaming_asr_model=os.getenv("STREAMING_ASR_MODEL", "paraformer-zh-streaming"),
+            streaming_vad_model=os.getenv("STREAMING_VAD_MODEL", "fsmn-vad"),
+            streaming_punc_model=os.getenv("STREAMING_PUNC_MODEL", "ct-punc"),
+            streaming_sensevoice_model=os.getenv("STREAMING_SENSEVOICE_MODEL", "iic/SenseVoiceSmall"),
+            streaming_enable_punc=str(os.getenv("STREAMING_ENABLE_PUNC", "True")).lower() == "true",
+            streaming_chunk_ms=int(os.getenv("STREAMING_CHUNK_MS", "600")),
+            streaming_funasr_server_url=os.getenv("STREAMING_FUNASR_SERVER_URL", None),
         )
 
 
@@ -105,7 +130,7 @@ class ModelConfig:
 class CacheConfig:
     """缓存和下载配置"""
     # 统一的缓存目录
-    cache_dir: str = "./.cache"
+    cache_dir: str = "./docker-deploy/.cache"
     
     # 离线模式配置
     local_files_only: bool = True
@@ -161,6 +186,7 @@ class CacheConfig:
         os.environ["TRANSFORMERS_CACHE"] = self.cache_dir
         os.environ["HF_HOME"] = self.cache_dir
         os.environ["HUGGINGFACE_HUB_CACHE"] = self.cache_dir
+        os.environ["MODELSCOPE_CACHE"] = self.cache_dir
         
         # 设置离线模式
         if self.transformers_offline:
@@ -325,6 +351,16 @@ def print_config_summary():
     print(f"  - Device: {config.model.device}")
     print(f"  - Compute Type: {config.model.compute_type}")
     print(f"  - Model Keep Alive: {config.model.model_keep_alive}")
+    
+    print("\n🌊 流式 ASR 配置:")
+    print(f"  - Streaming Engine: {config.model.streaming_asr_engine}")
+    print(f"  - Streaming ASR Model: {config.model.streaming_asr_model}")
+    print(f"  - Streaming VAD Model: {config.model.streaming_vad_model}")
+    print(f"  - Streaming Punc Model: {config.model.streaming_punc_model}")
+    print(f"  - Streaming SenseVoice Model: {config.model.streaming_sensevoice_model}")
+    print(f"  - Streaming Enable Punc: {config.model.streaming_enable_punc}")
+    print(f"  - Streaming Chunk Ms: {config.model.streaming_chunk_ms}")
+    print(f"  - FunASR Server URL: {config.model.streaming_funasr_server_url or '未配置'}")
     
     print("\n💾 缓存配置:")
     print(f"  - Cache Dir: {config.cache.cache_dir}")
