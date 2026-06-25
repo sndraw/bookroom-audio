@@ -1,7 +1,13 @@
 services:
   audio:
     image: bookroom-audio:latest
-    build: ..
+    build:
+      context: ..
+      args:
+        # APT 镜像源域名（构建时替换 deb.debian.org，国内环境配置为 mirrors.tuna.tsinghua.edu.cn 等加速）
+        APT_MIRROR: ${APT_MIRROR:-deb.debian.org}
+        # PyPI 镜像源（构建时 uv sync 使用，国内环境配置为 https://pypi.tuna.tsinghua.edu.cn/simple 等加速）
+        UV_INDEX_URL: ${UV_INDEX_URL:-https://pypi.org/simple}
     restart: unless-stopped
     volumes:
       - ./.cache:/app/.cache
@@ -27,6 +33,17 @@ services:
       ASR_ENGINE: ${ASR_ENGINE:-qwen-asr}
       ASR_MODEL: ${ASR_MODEL:-medium}
       ASR_LANGUAGE: ${ASR_LANGUAGE:-zh}
+
+      # 流式 ASR 配置（实时语音识别）
+      STREAMING_ASR_ENGINE: ${STREAMING_ASR_ENGINE:-funasr-local}
+      STREAMING_ASR_MODEL: ${STREAMING_ASR_MODEL:-paraformer-zh-streaming}
+      STREAMING_OFFLINE_MODEL: ${STREAMING_OFFLINE_MODEL:-paraformer-zh}
+      STREAMING_VAD_MODEL: ${STREAMING_VAD_MODEL:-fsmn-vad}
+      STREAMING_PUNC_MODEL: ${STREAMING_PUNC_MODEL:-ct-punc}
+      STREAMING_SENSEVOICE_MODEL: ${STREAMING_SENSEVOICE_MODEL:-iic/SenseVoiceSmall}
+      STREAMING_ENABLE_PUNC: ${STREAMING_ENABLE_PUNC:-true}
+      STREAMING_CHUNK_MS: ${STREAMING_CHUNK_MS:-600}
+      STREAMING_FUNASR_SERVER_URL: ${STREAMING_FUNASR_SERVER_URL:-}
 
       # VL (Vision-Language) 配置
       VL_MODEL: ${VL_MODEL:-medium}

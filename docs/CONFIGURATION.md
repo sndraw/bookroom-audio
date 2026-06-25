@@ -54,6 +54,27 @@ HF_ENDPOINT=https://www.modelscope.cn
 - 开发环境默认使用 `./docker-deploy/.cache`，与 Docker 部署共用同一缓存目录，方便模型迁移
 - FunASR/ModelScope 模型会下载到 `$CACHE_DIR/models/iic/` 子目录
 
+### Docker 构建加速配置（仅 build 时生效）
+
+`docker compose build` 时通过 `docker-deploy/.env` 注入镜像源，避免从官方源缓慢下载。这两个变量仅在构建阶段使用，不会进入运行时容器环境。
+
+| 变量 | 默认值 | 国内推荐值 | 说明 |
+|------|--------|-----------|------|
+| `APT_MIRROR` | `deb.debian.org` | `mirrors.tuna.tsinghua.edu.cn` | apt 镜像源域名，构建时替换 Debian sources |
+| `UV_INDEX_URL` | `https://pypi.org/simple` | `https://pypi.tuna.tsinghua.edu.cn/simple` | PyPI 镜像源，`uv sync` 安装 Python 包使用 |
+
+```bash
+# docker-deploy/.env 文件
+# 构建加速配置（仅 docker build 时生效）
+APT_MIRROR=mirrors.tuna.tsinghua.edu.cn
+UV_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple
+```
+
+**说明**：
+- `APT_MIRROR` 通过 `sed` 替换容器内 `/etc/apt/sources.list.d/debian.sources` 与 `/etc/apt/sources.list`，兼容 Debian trixie (DEB822) 与旧版格式
+- `UV_INDEX_URL` 通过 `ARG` 传入，仅作用于 `uv sync` 步骤
+- 默认值与官方源一致，海外构建可直接使用默认值，无需改动
+
 ### 命令行参数
 
 ```bash
