@@ -1,0 +1,473 @@
+# bookroom-audio 对接指南
+
+本指南介绍如何让外部项目对接 bookroom-audio 的实时语音识别（ASR）服务。
+
+## 概览
+
+bookroom-audio 提供两种对接方式：
+
+| 方式 | 协议端点 | 适用场景 |
+|------|---------|---------|
+| **原生协议** | `ws://<host>:<port>/v1/audio/streaming/transcriptions` | 使用 bookroom-audio SDK 或自定义客户端，功能最完整 |
+| **FunASR 兼容协议** | `ws://<host>:<port>/v1/audio/streaming/funasr` | 已有 FunASR 官方客户端 SDK 的项目，零改动对接 |
+
+两者共享同一套引擎（FunASR-Local / SenseVoice-Local / FunASR-Server），仅消息格式不同。
+
+## 鉴权
+
+所有端点均通过 Query 参数 `token` 鉴权：
+
+```
+ws://host:port/v1/audio/streaming/transcriptions?token=YOUR_API_KEY
+```
+
+`YOUR_API_KEY` 来自服务端 `.env` 中的 `API_KEY` 配置。未配置鉴权时可省略。
+
+## REST 接口
+
+### 查询可用引擎
+
+```
+GET /v1/audio/streaming/engines
+```
+
+返回当前服务端可用的流式 ASR 引擎列表，用于客户端选择。
+
+## 引擎选择
+
+| 引擎 | 模式 | 特点 |
+|------|------|------|
+| `funasr-local` | 流式 | Paraformer 流式模型，实时输出 PARTIAL + 句末 FINAL |
+| `sensevoice-local` | 伪流式 | SenseVoice + VAD，整句识别后输出 |
+| `funasr-server` | 流式 | 对接外部 FunASR Server，需配置 `STREAMING_FUNASR_SERVER_URL` |
+
+---
+
+## 一、原生协议
+
+### 消息格式（JSON）
+
+所有消息均以 UTF-8 文本帧发送，`type` 字段标识消息类型。
+
+#### 客户端 → 服务端
+
+**1. START - 启动会话**
+
+```json
+{
+  "type": "start",
+  "config": {
+    "engine": "funasr-local",
+    "language": "zh",
+    "audio_format": "pcm",
+    "sample_rate": 16000,
+    "enable_punctuation": true,
+    "enable_vad": true,
+    "enable_itn": true,
+    "enable_speaker_diarization": false,
+    "enable_emotion": false,
+    "hotwords": {"阿里巴巴": 20},
+    "chunk_size": [5, 10, 5],
+    "max_sentence_silence_ms": 1300
+  }
+}
+```
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `engine` | string | 引擎名，可选。未填则使用服务端默认值 |
+| `language` | string | 语言代码，默认 `zh` |
+| `audio_format` | string | 音频格式：`pcm` / `wav` / `mp3` |
+| `sample_rate` | int | 采样率，默认 16000 |
+| `enable_punctuation` | bool | 是否启用标点恢复 |
+| `enable_vad` | bool | 是否启用 VAD 自动断句 |
+| `enable_itn` | bool | 是否启用逆文本归一化（数字/日期等） |
+| `enable_speaker_diarization` | bool | 是否启用说话人分离 |
+| `enable_emotion` | bool | 是否启用情感识别 |
+| `hotwords` | object | 热词表，键为热词，值为权重 |
+| `chunk_size` | int[3] | 流式分块配置 |
+| `max_sentence_silence_ms` | int | VAD 静音断句阈值（毫秒） |
+
+**2. 二进制音频帧**
+
+START 后，客户端通过 WebSocket 二进制帧持续发送音频数据：
+- 格式必须与 `audio_format` 一致
+- 推荐每帧 100-600ms 音频（16kHz PCM = 3200-19200 字节）
+- 发送 PCM 时，服务端直接转发；发送 WAV/MP3 时，服务端自动解码
+
+**3. STOP - 结束会话**
+
+```json
+{"type": "stop"}
+```
+
+发送后服务端会推送剩余的 FINAL 结果，再发送 CLOSED 消息并关闭连接。
+
+#### 服务端 → 客户端
+
+**1. STARTED - 会话已启动**
+
+```json
+{
+  "type": "started",
+  "session_id": "uuid-xxxx",
+  "engine": "funasr-local",
+  "config": { /* 实际生效的配置 */ }
+}
+```
+
+**2. PARTIAL - 实时中间结果**
+
+```json
+{
+  "type": "partial",
+  "session_id": "uuid-xxxx",
+  "text": "你好",
+  "is_final": false,
+  "sentence_id": 0,
+  "timestamp_ms": 1200
+}
+```
+
+**3. FINAL - 句末最终结果**
+
+```json
+{
+  "type": "final",
+  "session_id": "uuid-xxxx",
+  "text": "你好，这是一个测试。",
+  "sentence_id": 0,
+  "start_ms": 0,
+  "end_ms": 1800,
+  "speaker": null,
+  "emotion": null,
+  "words": [
+    {"text": "你好", "start_ms": 0, "end_ms": 500},
+    {"text": "这是一个测试", "start_ms": 600, "end_ms": 1800}
+  ]
+}
+```
+
+**4. ERROR - 错误消息**
+
+```json
+{
+  "type": "error",
+  "session_id": "uuid-xxxx",
+  "code": "audio_decode_failed",
+  "message": "Decoding failed: ..."
+}
+```
+
+错误码包括：`auth_failed` / `invalid_config` / `engine_unavailable` / `audio_decode_failed` / `session_not_found` / `internal_error` 等。
+
+**5. CLOSED - 连接关闭**
+
+```json
+{
+  "type": "closed",
+  "session_id": "uuid-xxxx",
+  "reason": "normal"
+}
+```
+
+`reason` 取值：`normal`（正常关闭）/ `client_disconnected` / `server_shutdown` / `error` / `idle_timeout`。
+
+---
+
+## 二、FunASR 兼容协议
+
+与 FunASR 官方 `serve_realtime_ws.py` 协议兼容，使用 FunASR 官方客户端 SDK（Python/Java/JS/C++）的项目可直接对接，无需修改代码。
+
+### 消息格式
+
+#### 客户端 → 服务端
+
+**1. 初始化 JSON（连接后立即发送）**
+
+```json
+{
+  "mode": "2pass",
+  "chunk_size": [5, 10, 5],
+  "wav_name": "microphone",
+  "is_speaking": true,
+  "itn": true,
+  "audio_fs": 16000,
+  "wav_format": "pcm",
+  "hotwords": "{\"阿里巴巴\":20}"
+}
+```
+
+| 字段 | 说明 |
+|------|------|
+| `mode` | `online`（纯流式）/ `offline`（整句）/ `2pass`（流式 + 句末修正，推荐） |
+| `chunk_size` | 流式分块配置 |
+| `wav_name` | 音频源标识，响应中会原样回显 |
+| `is_speaking` | 必须为 `true` |
+| `itn` | 是否启用逆文本归一化 |
+| `audio_fs` | 采样率 |
+| `wav_format` | `pcm` / `wav` / `mp3` |
+| `hotwords` | JSON 字符串形式的热词表 |
+
+**2. 二进制音频帧**
+
+发送 PCM 二进制数据，推荐 600ms 一帧。
+
+**3. 结束信号**
+
+```json
+{"is_speaking": false}
+```
+
+#### 服务端 → 客户端
+
+**1. PARTIAL（2pass-online）**
+
+```json
+{
+  "mode": "2pass-online",
+  "wav_name": "microphone",
+  "text": "你好",
+  "is_final": false
+}
+```
+
+**2. FINAL（2pass-offline）**
+
+```json
+{
+  "mode": "2pass-offline",
+  "wav_name": "microphone",
+  "text": "你好，这是一个测试。",
+  "is_final": true,
+  "timestamp": "[[0,500],[600,1800]]"
+}
+```
+
+> 标点说明：PARTIAL 结果为增量文本（无标点，保持实时性）；FINAL 结果为整句经标点恢复模型（ct-punc）处理后的完整文本，包含逗号、句号等标点。
+
+**3. 错误消息**
+
+```json
+{
+  "mode": "",
+  "wav_name": "microphone",
+  "text": "[error:audio_decode_failed] Decoding failed: ...",
+  "is_final": true,
+  "error": true,
+  "error_code": "audio_decode_failed"
+}
+```
+
+### 模式映射
+
+| FunASR `mode` | bookroom-audio 引擎 |
+|---------------|---------------------|
+| `online` | `funasr-local`（纯流式 Paraformer） |
+| `2pass` | `funasr-local`（流式 + 句末修正） |
+| `offline` | `sensevoice-local`（整句识别） |
+
+---
+
+## 三、客户端 SDK
+
+为简化对接，提供 TypeScript/JavaScript SDK，同时支持浏览器和 Node.js。
+
+### 位置
+
+```
+sdk/typescript/
+├── src/
+│   ├── client.ts       # 核心客户端
+│   ├── mic.ts          # 浏览器麦克风采集
+│   ├── websocket.ts    # 跨平台 WebSocket
+│   ├── types.ts        # 类型定义
+│   └── index.ts        # 入口
+├── examples/
+│   ├── browser_mic.html  # 浏览器示例
+│   └── node_file_stream.js  # Node.js 示例
+└── package.json
+```
+
+### 安装
+
+```bash
+# 在 SDK 目录下编译
+cd sdk/typescript
+npm install
+npm run build
+```
+
+### 浏览器使用
+
+```typescript
+import { BookRoomASRClient, MicCapturer } from 'bookroom-audio-sdk';
+
+const client = new BookRoomASRClient(
+  {
+    url: 'ws://127.0.0.1:15231/v1/audio/streaming/transcriptions',
+    apiKey: 'YOUR_KEY',
+    mode: 'native', // 或 'funasr'
+  },
+  {
+    onStarted: (msg) => console.log('Session:', msg.session_id),
+    onPartial: (text) => console.log('Partial:', text),
+    onFinal: (text) => console.log('Final:', text),
+  },
+);
+
+await client.connect();
+await client.start({
+  audio_format: 'pcm',
+  sample_rate: 16000,
+});
+
+// 启动麦克风
+const mic = new MicCapturer(
+  (chunk) => client.sendAudio(chunk),
+  { sampleRate: 16000, frameMs: 100 },
+);
+await mic.start();
+
+// 停止
+await client.stop();
+mic.stop();
+```
+
+### Node.js 使用
+
+```javascript
+const fs = require('fs');
+const { BookRoomASRClient } = require('bookroom-audio-sdk');
+
+const client = new BookRoomASRClient({
+  url: 'ws://127.0.0.1:15231/v1/audio/streaming/transcriptions',
+  apiKey: process.env.BOOKROOM_AUDIO_KEY,
+});
+
+await client.connect();
+await client.start({ audio_format: 'pcm', sample_rate: 16000 });
+
+// 从文件流式发送
+const stream = fs.createReadStream('audio.wav', { highWaterMark: 19200 });
+stream.on('data', (chunk) => client.sendAudio(chunk.buffer));
+stream.on('end', async () => {
+  await client.stop();
+  client.close();
+});
+```
+
+完整示例见：
+- `sdk/typescript/examples/browser_mic.html`
+- `sdk/typescript/examples/node_file_stream.js`
+
+---
+
+## 四、测试
+
+测试脚本位于 `tests/streaming_asr/`，提供统一入口，按模块拆分：
+
+### 环境变量配置
+
+```bash
+export SERVER_HOST=127.0.0.1
+export SERVER_PORT=15231
+export API_KEY=test_api_key
+export TEST_AUDIO_WAV=tests/real_chinese_audio.wav
+export TEST_TIMEOUT=120
+```
+
+### 统一测试入口（推荐）
+
+```bash
+# 运行所有模块
+python -m tests.streaming_asr
+
+# 只测原生协议
+python -m tests.streaming_asr --module native
+
+# 只测 FunASR 兼容
+python -m tests.streaming_asr --module funasr_compat
+```
+
+### 单独运行模块
+
+```bash
+# 原生协议端点
+python -m tests.streaming_asr.test_native
+
+# FunASR 兼容端点
+python -m tests.streaming_asr.test_funasr_compat
+```
+
+### 测试验证内容
+
+测试脚本自动验证：
+- 连接建立
+- 消息格式符合协议规范
+- 必需字段齐全
+- PARTIAL（实时增量）+ FINAL（整句 + 标点）正确返回
+- 标点恢复模型生效（ct-punc）
+
+### 测试结果示例
+
+```
+[PARTIAL] '你'
+[PARTIAL] '好'
+[PARTIAL] '这是一个'
+...
+[FINAL] sentence#0 text='你好，这是一个真实的中文语音测试。今天天气很好，我们一起去公园散步吧。'
+```
+
+---
+
+## 五、典型对接场景
+
+### 场景 1：bookroom-chat 集成实时语音输入
+
+bookroom-chat 作为 Agent 对话项目，可以让用户通过麦克风实时输入文本：
+
+1. 在 bookroom-chat 前端引入 bookroom-audio SDK
+2. 用户点击「语音输入」时，建立 WebSocket 连接
+3. 采集麦克风音频，流式发送到 bookroom-audio
+4. 收到 FINAL 结果后，填充到聊天输入框
+5. 用户点击「发送」，将文本提交给 Agent
+
+### 场景 2：电话客服转写
+
+1. 通过 SIP/PSTN 网关采集电话音频
+2. 转换为 16kHz PCM 流
+3. 通过 WebSocket 发送到 bookroom-audio
+4. 收到实时转写结果，存入对话记录
+
+### 场景 3：会议记录
+
+1. 通过浏览器 getUserMedia 采集会议室音频
+2. 启用说话人分离
+3. 按 FINAL 结果分句存储，标注说话人
+4. 会议结束后生成完整纪要
+
+---
+
+## 六、配置参考
+
+服务端通过 `.env` 配置：
+
+```bash
+# 服务端地址
+HOST=0.0.0.0
+PORT=15231
+API_KEY=your_api_key
+
+# 流式 ASR
+STREAMING_ASR_ENGINE=funasr-local
+STREAMING_ASR_MODEL=paraformer-zh-streaming
+STREAMING_VAD_MODEL=fsmn-vad
+STREAMING_PUNC_MODEL=ct-punc
+STREAMING_CHUNK_MS=600
+
+# 模型缓存
+CACHE_DIR=./docker-deploy/.cache
+```
+
+详细配置见 `docs/CONFIGURATION.md`。

@@ -403,7 +403,7 @@ def create_streaming_routes(
         websocket: WebSocket,
         token: Optional[str] = Query(default=None),
     ) -> None:
-        """流式语音识别 WebSocket 端点
+        """流式语音识别 WebSocket 端点（bookroom-audio 原生协议）
 
         协议流程：
         1. 客户端建立 WebSocket 连接（带 token 鉴权）
@@ -426,6 +426,43 @@ def create_streaming_routes(
             return
 
         handler = StreamingConnectionHandler(websocket, api_key)
+        await handler.handle()
+
+    @router.websocket("/funasr")
+    async def streaming_funasr_compat(
+        websocket: WebSocket,
+        token: Optional[str] = Query(default=None),
+    ) -> None:
+        """FunASR 协议兼容端点
+
+        与 FunASR serve_realtime_ws.py 协议兼容，使用 FunASR
+        官方客户端 SDK 的项目可直接对接，无需修改代码。
+
+        协议流程：
+        1. 客户端建立 WebSocket 连接（带 token 鉴权）
+        2. 客户端发送初始化 JSON（mode/chunk_size/is_speaking=true 等）
+        3. 客户端持续发送 binary PCM 音频帧
+        4. 服务端持续推送 JSON 结果（mode: 2pass-online/2pass-offline）
+        5. 客户端发送 {"is_speaking": false} 标识结束
+        6. 服务端推送最后 FINAL 结果后关闭连接
+        """
+        # 鉴权
+        if not await verify_token(token):
+            await websocket.accept()
+            await websocket.send_text(json.dumps({
+                "mode": "",
+                "text": "[error:auth_failed] Invalid or missing API token",
+                "is_final": True,
+                "error": True,
+                "error_code": ErrorCode.AUTH_FAILED.value,
+            }))
+            await websocket.close(code=4001)
+            return
+
+        from bookroom_audio.api.routers.transcribe_streaming.funasr_compat import (
+            FunASRCompatHandler,
+        )
+        handler = FunASRCompatHandler(websocket, api_key)
         await handler.handle()
 
     @router.get("/engines")
