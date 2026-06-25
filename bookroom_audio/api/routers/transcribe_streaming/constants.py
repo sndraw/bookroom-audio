@@ -103,6 +103,7 @@ class DefaultModel(str, Enum):
     - SenseVoice 使用完整 ModelScope ID "iic/SenseVoiceSmall"
     """
     FUNASR_STREAMING = "paraformer-zh-streaming"
+    FUNASR_OFFLINE = "paraformer-zh"
     FUNASR_VAD = "fsmn-vad"
     FUNASR_PUNC = "ct-punc"
     SENSE_VOICE = "iic/SenseVoiceSmall"

@@ -39,7 +39,26 @@ GET /v1/audio/streaming/engines
 |------|------|------|
 | `funasr-local` | 流式 | Paraformer 流式模型，实时输出 PARTIAL + 句末 FINAL |
 | `sensevoice-local` | 伪流式 | SenseVoice + VAD，整句识别后输出 |
-| `funasr-server` | 流式 | 对接外部 FunASR Server，需配置 `STREAMING_FUNASR_SERVER_URL` |
+| `funasr-server` | 对接外部 | 对接外部 FunASR Server，需配置 `STREAMING_FUNASR_SERVER_URL` |
+
+### 2pass 纠错机制（funasr-local 默认启用）
+
+为解决流式模型在同音字、复杂长句上易出现的"听写错误"，`funasr-local` 引擎采用 **2pass 识别模式**：
+
+1. **PARTIAL 阶段（流式实时）**：使用 `paraformer-zh-streaming` 流式模型逐 chunk 推理，输出"累积整句"作为 PARTIAL，让用户即时看到结果。流式模型不挂载标点模型，避免 PARTIAL 阶段错误加标点导致后续纠正困难。
+2. **FINAL 阶段（离线精确纠错）**：会话 STOP 时，用独立的 `paraformer-zh`（离线精确模型）对整段会话音频重新识别，纠正流式阶段可能出现的同音字、近音字错误；再对纠错后的整句文本应用 `ct-punc` 标点恢复模型，输出带标点的 FINAL。
+3. **失败回退**：若离线模型加载或推理失败，自动回退到流式累积文本 + 标点恢复，保证可用性。
+
+效果示例（PARTIAL 逐步增长 → FINAL 纠错 + 标点）：
+```
+PARTIAL: '你' → '你好' → '你好这是一个' → ... → '你好这是一个真实的中文语音测试今天天气很好我们一起去公园散步吧'
+FINAL:   '你好，这是一个真实的中文语音测试。今天天气很好，我们一起去公园散步吧。'
+```
+
+相关配置项：
+- `STREAMING_ASR_MODEL`：流式模型（默认 `paraformer-zh-streaming`）
+- `STREAMING_OFFLINE_MODEL`：2pass 离线精确模型（默认 `paraformer-zh`）
+- `STREAMING_PUNC_MODEL`：标点恢复模型（默认 `ct-punc`）
 
 ---
 
@@ -118,15 +137,22 @@ START 后，客户端通过 WebSocket 二进制帧持续发送音频数据：
 
 **2. PARTIAL - 实时中间结果**
 
+> **语义说明（替换式）**：每条 PARTIAL 的 `text` 都是"**到目前为止的整句识别结果**"，后到的会覆盖前一条。客户端直接用最新 PARTIAL 的 `text` 替换当前显示即可，无需自己拼接增量。
+
 ```json
 {
   "type": "partial",
   "session_id": "uuid-xxxx",
-  "text": "你好",
+  "text": "你好这是一个真实的",
   "is_final": false,
   "sentence_id": 0,
-  "timestamp_ms": 1200
+  "timestamp_ms": 4200
 }
+```
+
+PARTIAL 序列示例（`text` 不断增长，非单 chunk 增量）：
+```
+'你' → '你好' → '你好这是一个' → '你好这是一个真实的中' → ...
 ```
 
 **3. FINAL - 句末最终结果**
@@ -223,11 +249,13 @@ START 后，客户端通过 WebSocket 二进制帧持续发送音频数据：
 
 **1. PARTIAL（2pass-online）**
 
+> **语义说明（替换式）**：每条 PARTIAL 的 `text` 都是"**到目前为止的整句识别结果**"，后到的会覆盖前一条。客户端直接用最新 `text` 替换当前显示即可，无需自己拼接增量。
+
 ```json
 {
   "mode": "2pass-online",
   "wav_name": "microphone",
-  "text": "你好",
+  "text": "你好这是一个真实的",
   "is_final": false
 }
 ```
@@ -244,7 +272,7 @@ START 后，客户端通过 WebSocket 二进制帧持续发送音频数据：
 }
 ```
 
-> 标点说明：PARTIAL 结果为增量文本（无标点，保持实时性）；FINAL 结果为整句经标点恢复模型（ct-punc）处理后的完整文本，包含逗号、句号等标点。
+> 标点说明：PARTIAL 返回累积整句但不含标点（保持实时性）；FINAL 为整句经标点恢复模型（ct-punc）处理后的完整文本，包含逗号、句号等标点。
 
 **3. 错误消息**
 
@@ -406,15 +434,16 @@ python -m tests.streaming_asr.test_funasr_compat
 - 连接建立
 - 消息格式符合协议规范
 - 必需字段齐全
-- PARTIAL（实时增量）+ FINAL（整句 + 标点）正确返回
+- PARTIAL（替换式整句）+ FINAL（整句 + 标点）正确返回
 - 标点恢复模型生效（ct-punc）
 
 ### 测试结果示例
 
 ```
 [PARTIAL] '你'
-[PARTIAL] '好'
-[PARTIAL] '这是一个'
+[PARTIAL] '你好'
+[PARTIAL] '你好这是一个'
+[PARTIAL] '你好这是一个真实的中'
 ...
 [FINAL] sentence#0 text='你好，这是一个真实的中文语音测试。今天天气很好，我们一起去公园散步吧。'
 ```
@@ -462,6 +491,7 @@ API_KEY=your_api_key
 # 流式 ASR
 STREAMING_ASR_ENGINE=funasr-local
 STREAMING_ASR_MODEL=paraformer-zh-streaming
+STREAMING_OFFLINE_MODEL=paraformer-zh
 STREAMING_VAD_MODEL=fsmn-vad
 STREAMING_PUNC_MODEL=ct-punc
 STREAMING_CHUNK_MS=600

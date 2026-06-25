@@ -40,6 +40,10 @@ _funasr_available: Optional[bool] = None
 _punc_model: Optional[Any] = None
 _punc_lock = threading.Lock()
 
+# 2pass 离线精确模型单例（FINAL 时用整句音频重新识别以纠正 PARTIAL 错误）
+_offline_model: Optional[Any] = None
+_offline_lock = threading.Lock()
+
 
 def _check_funasr_available() -> bool:
     """检查 funasr 包是否可导入"""
@@ -106,6 +110,95 @@ def _apply_punc(text: str) -> str:
         logger.warning(f"[FunASR-Local] Punc failed: {e}")
 
     return text
+
+
+def _get_offline_model() -> Optional[Any]:
+    """获取或加载 2pass 离线精确模型（单例）
+
+    用于 FINAL 阶段：将整句音频送入 paraformer-zh（非流式精确模型）
+    重新识别，以纠正 PARTIAL 流式阶段产生的同音字等错误。
+
+    返回 None 表示未配置或加载失败，调用方应回退到流式累积结果。
+    """
+    global _offline_model
+
+    if _offline_model is None:
+        with _offline_lock:
+            if _offline_model is None:
+                config = get_config()
+                offline_model_name = (
+                    config.model.streaming_offline_model
+                    or DefaultModel.FUNASR_OFFLINE.value
+                )
+                logger.info(
+                    f"Loading FunASR offline model (2pass FINAL): "
+                    f"{offline_model_name}"
+                )
+                try:
+                    from funasr import AutoModel
+                    _offline_model = AutoModel(
+                        model=offline_model_name,
+                        device=config.model.device,
+                        disable_update=True,
+                        hub="ms",
+                    )
+                    logger.info("FunASR offline model loaded")
+                except Exception as e:
+                    logger.warning(
+                        f"[FunASR-Local] Offline model load failed: {e}. "
+                        f"FINAL 将回退到流式累积结果。"
+                    )
+                    return None
+
+    return _offline_model
+
+
+def _infer_offline_full(audio_bytes: bytes) -> Optional[str]:
+    """2pass 离线精确识别整段音频
+
+    将整段 PCM 16k 16bit mono 音频送入 paraformer-zh 离线模型，
+    返回精确识别文本（修正流式阶段同音字错误）。
+
+    Args:
+        audio_bytes: PCM 16k 16bit mono 整段音频字节
+
+    Returns:
+        识别文本；None 表示模型不可用或识别失败
+    """
+    if not audio_bytes:
+        return None
+
+    try:
+        offline_model = _get_offline_model()
+        if offline_model is None:
+            return None
+
+        # paraformer-zh 接受 numpy array 输入（float32, 16kHz）
+        # 将 PCM bytes 转换为 numpy float32
+        import numpy as np
+
+        # 解码 16-bit PCM 为 int16 数组
+        audio_int16 = np.frombuffer(audio_bytes, dtype=np.int16)
+        # 转换为 float32 并归一化到 [-1, 1]
+        audio_float32 = audio_int16.astype(np.float32) / 32768.0
+
+        results = offline_model.generate(
+            input=audio_float32,
+            # 注：paraformer-zh 自身不带 VAD，整段音频视为单句
+        )
+        if results:
+            text = results[0].get("text", "")
+            # paraformer-zh 输出为 token 级，中文字符间带空格分隔
+            # 去除多余空格还原自然文本（不影响英文单词内的连续字符判断
+            # 因为英文场景下 paraformer-zh 同样以字为单位输出）
+            if text:
+                text = text.replace(" ", "")
+            return text if text else None
+    except Exception as e:
+        logger.warning(
+            f"[FunASR-Local] Offline inference failed: {e}"
+        )
+    return None
 
 
 def _get_funasr_model() -> Any:
@@ -203,7 +296,11 @@ class FunASRLocalBackend(StreamingASRBackend):
         # 每个 session 维护独立的 cache
         cache: Dict[str, Any] = {}
         setattr(session, "_cache", cache)
+        # chunk 级缓冲：每攒满一个 chunk 大小即推理并清空
         setattr(session, "_audio_buffer", bytearray())
+        # 会话级完整音频缓冲：累积整个会话的音频
+        # 用于 FINAL 时送入 offline 精确模型重新识别整句
+        setattr(session, "_session_audio", bytearray())
         setattr(session, "_sentence_count", 0)
 
         return session
@@ -216,6 +313,9 @@ class FunASRLocalBackend(StreamingASRBackend):
         """累积音频，达到阈值后调用模型"""
         buffer: bytearray = getattr(session, "_audio_buffer")
         buffer.extend(audio_chunk)
+        # 同时累积到会话级缓冲（供 FINAL 时 offline 重新识别整句）
+        session_audio: bytearray = getattr(session, "_session_audio")
+        session_audio.extend(audio_chunk)
         session.total_audio_ms += len(audio_chunk) // PCM_BYTES_PER_MS
 
         chunk_ms = getattr(session.config, "_effective_chunk_ms", DEFAULT_CHUNK_MS)
@@ -274,8 +374,28 @@ class FunASRLocalBackend(StreamingASRBackend):
             sentence_id = result.get("sentence_id", 0)
             is_final = result.get("is_final", False)
 
+            # 2pass-online 模式：PARTIAL 返回"到目前为止的整句"（替换式）
+            # 而非单个 chunk 的增量文本，便于客户端实时展示完整识别结果
+            if not is_final:
+                # 累积所有 chunk 文本，形成当前句子的完整内容
+                accumulated: str = getattr(
+                    session, "_accumulated_text", ""
+                )
+                accumulated += text
+                setattr(session, "_accumulated_text", accumulated)
+                # PARTIAL 的 text 字段返回累积整句
+                display_text = accumulated
+            else:
+                # 模型返回 is_final=True（VAD 自动断句）
+                # 当前累积文本 + 本次结果构成完整句，然后清空累积
+                accumulated: str = getattr(
+                    session, "_accumulated_text", ""
+                )
+                display_text = accumulated + text
+                setattr(session, "_accumulated_text", "")
+
             asr_result = ASRResult(
-                text=text,
+                text=display_text,
                 is_final=is_final,
                 sentence_id=sentence_id,
                 start_ms=result.get("timestamp", [[0]])[0][0]
@@ -286,12 +406,6 @@ class FunASRLocalBackend(StreamingASRBackend):
             # 保存最后一次 PARTIAL 结果，用于停止时生成 FINAL
             if not is_final:
                 setattr(session, "_last_partial", asr_result)
-                # 累积所有 PARTIAL 文本，用于 STOP 时拼接整句
-                accumulated: str = getattr(
-                    session, "_accumulated_text", ""
-                )
-                accumulated += text
-                setattr(session, "_accumulated_text", accumulated)
 
             return asr_result
 
@@ -338,11 +452,15 @@ class FunASRLocalBackend(StreamingASRBackend):
         model.generate(input=[], cache=cache, is_final=True)
         来触发最终 flush。
 
-        FINAL 结果为所有 PARTIAL 累积文本经标点恢复后的整句。
+        2pass FINAL 生成流程：
+        1. flush 流式模型残留 cache（同步累积文本）
+        2. 用 offline 精确模型对整段会话音频重新识别（纠正同音字错误）
+        3. 对 offline 识别结果应用标点恢复
+        4. 推送 FINAL；offline 失败时回退到流式累积文本
         """
         buffer: bytearray = getattr(session, "_audio_buffer", bytearray())
 
-        # 1. flush 最后一段音频（处理残留 cache）
+        # 1. flush 流式模型最后一段音频（处理残留 cache）
         try:
             loop = asyncio.get_event_loop()
             flush_result = await loop.run_in_executor(
@@ -351,7 +469,7 @@ class FunASRLocalBackend(StreamingASRBackend):
                 session,
                 bytes(buffer),
             )
-            # flush 结果追加到累积文本
+            # flush 结果追加到累积文本（用作回退方案）
             if flush_result is not None and flush_result.text:
                 accumulated: str = getattr(
                     session, "_accumulated_text", ""
@@ -363,26 +481,48 @@ class FunASRLocalBackend(StreamingASRBackend):
                 f"[FunASR-Local] Final inference error: {e}"
             )
 
-        # 2. 用累积文本 + 标点恢复构建 FINAL 结果
+        # 回退文本：流式累积 + 标点
         accumulated_text: str = getattr(
             session, "_accumulated_text", ""
         )
         last_partial = getattr(session, "_last_partial", None)
 
-        if accumulated_text:
-            # 对整句应用标点恢复
+        # 2. 用 offline 精确模型重新识别整段会话音频（2pass 核心纠错）
+        session_audio: bytearray = getattr(
+            session, "_session_audio", bytearray()
+        )
+        offline_text: Optional[str] = None
+        if len(session_audio) > 0:
+            offline_text = await loop.run_in_executor(
+                None,
+                _infer_offline_full,
+                bytes(session_audio),
+            )
+
+        # 3. 选择 FINAL 文本：offline 优先，失败回退到流式累积
+        if offline_text:
+            # offline 模型已修正同音字等错误，再应用标点恢复
+            final_text = await loop.run_in_executor(
+                None,
+                _apply_punc,
+                offline_text,
+            )
+            logger.info(
+                f"[FunASR-Local] 2pass FINAL (offline): "
+                f"streaming='{accumulated_text}' → "
+                f"offline='{offline_text}' → punc='{final_text}'"
+            )
+        elif accumulated_text:
+            # offline 不可用时，回退到流式累积 + 标点
             final_text = await loop.run_in_executor(
                 None,
                 _apply_punc,
                 accumulated_text,
             )
-            session.push_result(ASRResult(
-                text=final_text,
-                is_final=True,
-                sentence_id=last_partial.sentence_id if last_partial else 0,
-                start_ms=last_partial.start_ms if last_partial else 0,
-                end_ms=session.total_audio_ms,
-            ))
+            logger.info(
+                f"[FunASR-Local] 2pass FINAL (fallback streaming): "
+                f"'{accumulated_text}' → '{final_text}'"
+            )
         elif last_partial is not None:
             # 无累积文本时，使用最后一次 PARTIAL + 标点
             final_text = await loop.run_in_executor(
@@ -390,13 +530,21 @@ class FunASRLocalBackend(StreamingASRBackend):
                 _apply_punc,
                 last_partial.text,
             )
-            session.push_result(ASRResult(
-                text=final_text,
-                is_final=True,
-                sentence_id=last_partial.sentence_id,
-                start_ms=last_partial.start_ms,
-                end_ms=session.total_audio_ms,
-            ))
+        else:
+            # 无任何识别结果
+            session.mark_stopped()
+            logger.info(
+                f"[FunASR-Local] Session {session.session_id} closed (no result)"
+            )
+            return
+
+        session.push_result(ASRResult(
+            text=final_text,
+            is_final=True,
+            sentence_id=last_partial.sentence_id if last_partial else 0,
+            start_ms=last_partial.start_ms if last_partial else 0,
+            end_ms=session.total_audio_ms,
+        ))
 
         session.mark_stopped()
         logger.info(

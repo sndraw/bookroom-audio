@@ -100,7 +100,8 @@ python -m bookroom_audio.server \
 | `tts_language` | str | `"zh"` | TTS默认语言 |
 | **流式 ASR 配置** | | | |
 | `streaming_asr_engine` | str | `"funasr-local"` | 流式ASR引擎 (funasr-server, funasr-local, sensevoice-local) |
-| `streaming_asr_model` | str | `"paraformer-zh-streaming"` | FunASR 流式模型 |
+| `streaming_asr_model` | str | `"paraformer-zh-streaming"` | FunASR 流式模型（PARTIAL 阶段） |
+| `streaming_offline_model` | str | `"paraformer-zh"` | FunASR 2pass 离线精确模型（FINAL 阶段纠错） |
 | `streaming_vad_model` | str | `"fsmn-vad"` | VAD 端点检测模型 |
 | `streaming_punc_model` | str | `"ct-punc"` | 标点恢复模型 |
 | `streaming_sensevoice_model` | str | `"iic/SenseVoiceSmall"` | SenseVoice 模型（sensevoice-local 引擎使用） |

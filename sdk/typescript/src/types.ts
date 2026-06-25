@@ -113,7 +113,13 @@ export interface StartedMessage {
   config: Record<string, unknown>;
 }
 
-/** PARTIAL 中间结果 */
+/**
+ * PARTIAL 中间结果
+ *
+ * 语义说明（替换式）：`text` 字段为"到目前为止的整句识别结果"，
+ * 后到的 PARTIAL 会覆盖前一条。客户端直接用最新 `text` 替换当前显示即可，
+ * 无需自己拼接增量文本。
+ */
 export interface PartialMessage {
   type: 'partial';
   session_id: string;

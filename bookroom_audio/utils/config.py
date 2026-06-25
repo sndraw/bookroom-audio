@@ -66,6 +66,8 @@ class ModelConfig:
     # （此处不直接导入以避免 utils → routers 的循环导入）
     streaming_asr_engine: str = "funasr-local"
     streaming_asr_model: str = "paraformer-zh-streaming"
+    # 2pass 离线精确模型，用于 FINAL 时对整句音频重新识别以纠正 PARTIAL 阶段的错误
+    streaming_offline_model: str = "paraformer-zh"
     streaming_vad_model: str = "fsmn-vad"
     streaming_punc_model: str = "ct-punc"
     streaming_sensevoice_model: str = "iic/SenseVoiceSmall"
@@ -117,6 +119,7 @@ class ModelConfig:
             # 权威定义见 transcribe_streaming/constants.py 的 DefaultModel 枚举
             streaming_asr_engine=os.getenv("STREAMING_ASR_ENGINE", "funasr-local"),
             streaming_asr_model=os.getenv("STREAMING_ASR_MODEL", "paraformer-zh-streaming"),
+            streaming_offline_model=os.getenv("STREAMING_OFFLINE_MODEL", "paraformer-zh"),
             streaming_vad_model=os.getenv("STREAMING_VAD_MODEL", "fsmn-vad"),
             streaming_punc_model=os.getenv("STREAMING_PUNC_MODEL", "ct-punc"),
             streaming_sensevoice_model=os.getenv("STREAMING_SENSEVOICE_MODEL", "iic/SenseVoiceSmall"),
@@ -355,6 +358,7 @@ def print_config_summary():
     print("\n🌊 流式 ASR 配置:")
     print(f"  - Streaming Engine: {config.model.streaming_asr_engine}")
     print(f"  - Streaming ASR Model: {config.model.streaming_asr_model}")
+    print(f"  - Streaming Offline Model: {config.model.streaming_offline_model}")
     print(f"  - Streaming VAD Model: {config.model.streaming_vad_model}")
     print(f"  - Streaming Punc Model: {config.model.streaming_punc_model}")
     print(f"  - Streaming SenseVoice Model: {config.model.streaming_sensevoice_model}")

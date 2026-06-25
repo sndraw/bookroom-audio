@@ -70,7 +70,7 @@ const response = await fetch('http://localhost:15231/v1/tts/generate', {
 | 引擎 | 类型 | 特点 |
 |------|------|------|
 | `funasr-server` | 远程代理 | 连接外部 FunASR `serve_realtime_ws.py` 服务，原生流式，支持多客户端负载 |
-| `funasr-local` | 进程内 | 基于 FunASR Paraformer-zh-streaming，分块流式，自带 VAD + 标点 |
+| `funasr-local` | 进程内 | 基于 FunASR Paraformer-zh-streaming，分块流式，自带 VAD + 标点；支持 2pass 纠错（FINAL 用 paraformer-zh 整句重识别，纠正同音字错误） |
 | `sensevoice-local` | 进程内 | 基于 SenseVoiceSmall，超快推理，支持情感/事件检测，VAD 模拟流式 |
 
 - 支持 VAD 自动端点检测和句子分割
