@@ -72,7 +72,8 @@ services:
           memory: 4G
           cpus: '2.0'
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:${PORT:-15231}/health"]
+      # 容器内未安装 curl/wget，使用 python urllib 做健康检查（python 必然存在）
+      test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://localhost:${PORT:-15231}/health')"]
       interval: 30s
       timeout: 10s
       retries: 3
