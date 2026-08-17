@@ -2,6 +2,7 @@ import asyncio
 import signal
 import sys
 from contextlib import asynccontextmanager
+from urllib.parse import unquote
 import os
 from fastapi import FastAPI, HTTPException, Request, Response
 from dotenv import load_dotenv, find_dotenv
@@ -27,6 +28,32 @@ from bookroom_audio.utils.utils_api import (
     logger,
 )
 from bookroom_audio.api import __api_name__, __api_description__, __api_version__
+
+class _ProxyPathNormalizeMiddleware:
+    """代理绝对 URI 路径归一化。
+
+    某些 HTTP 代理（如开发沙箱代理）会把请求行中的绝对 URI URL 编码后转发
+    （POST http%3A//host%3Aport/v1/...），FastAPI 严格路径匹配会 404。
+    在 ASGI 层解码并剥离 scheme/host，恢复为 /v1/... 再交给路由。
+    仅影响以 http:// / https:// 开头的畸形路径，正常请求不受影响。
+    """
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope.get("type") == "http":
+            path = scope.get("path", "") or ""
+            decoded = unquote(path)
+            if decoded.startswith("http://") or decoded.startswith("https://"):
+                from urllib.parse import urlsplit
+
+                parsed = urlsplit(decoded)
+                scope["path"] = parsed.path or "/"
+                scope["raw_path"] = scope["path"].encode("utf-8", "surrogateescape")
+                scope["query_string"] = parsed.query.encode("utf-8")
+        await self.app(scope, receive, send)
+
 
 # 确保环境变量已加载
 load_dotenv(find_dotenv(), override=True)
@@ -188,6 +215,9 @@ def create_app(args) -> FastAPI:
     app.include_router(create_video_routes(args, api_key))
     app.include_router(create_image_routes(args, api_key))
     app.include_router(create_openai_routes(args, api_key))
+
+    # 代理绝对 URI 路径归一化（沙箱代理会把绝对 URI 编码成 http%3A//...，FastAPI 会 404）
+    app = _ProxyPathNormalizeMiddleware(app)
     return app
 
 args = parse_args()
