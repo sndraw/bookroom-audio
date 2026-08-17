@@ -25,6 +25,19 @@ ASR_ENGINE=qwen-asr
 ASR_MODEL=medium
 ASR_LANGUAGE=zh
 
+# 流式 ASR 配置
+STREAMING_ASR_ENGINE=funasr-local
+STREAMING_ASR_MODEL=paraformer-zh-streaming
+# 2pass 离线精确模型（FINAL 阶段整句重识别纠错 + 字级时间戳）
+STREAMING_OFFLINE_MODEL=paraformer-zh
+STREAMING_VAD_MODEL=fsmn-vad
+STREAMING_PUNC_MODEL=ct-punc
+STREAMING_SENSEVOICE_MODEL=iic/SenseVoiceSmall
+STREAMING_ENABLE_PUNC=True
+STREAMING_CHUNK_MS=600
+# 外部 FunASR 服务地址（仅 funasr-server 引擎需要，ws://host:port）
+STREAMING_FUNASR_SERVER_URL=
+
 # 通用模型配置
 DEVICE=cpu
 COMPUTE_TYPE=int8

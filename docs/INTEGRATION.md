@@ -13,6 +13,78 @@ bookroom-audio 提供两种对接方式：
 
 两者共享同一套引擎（FunASR-Local / SenseVoice-Local / FunASR-Server），仅消息格式不同。
 
+### 系统架构
+
+```mermaid
+flowchart TB
+    subgraph 客户端
+        SDK["TypeScript SDK<br/>(@bookroom/audio-sdk)"]
+        DEMO["浏览器 Demo<br/>(demo/)"]
+        FUNASR["FunASR 官方客户端"]
+    end
+
+    subgraph 服务端
+        subgraph 端点
+            NATIVE["transcriptions<br/>原生协议"]
+            COMPAT["funasr<br/>FunASR 兼容"]
+        end
+        HANDLER["StreamingConnectionHandler<br/>鉴权 · PING/PONG 心跳(90s 超时)<br/>PAUSE/RESUME 暂停恢复"]
+        subgraph 引擎
+            FL["funasr-local"]
+            SV["sensevoice-local"]
+            FS["funasr-server"]
+        end
+    end
+
+    subgraph 模型
+        MS["paraformer-zh-streaming"]
+        MO["paraformer-zh (2pass 纠错 + 字级时间戳)"]
+        MP["ct-punc"]
+        MV["fsmn-vad"]
+        MSS["SenseVoiceSmall"]
+    end
+
+    SDK --> NATIVE
+    DEMO --> NATIVE
+    FUNASR --> COMPAT
+    NATIVE --> HANDLER
+    COMPAT --> HANDLER
+    HANDLER --> FL & SV & FS
+    FL --> MS & MO & MP & MV
+    SV --> MSS & MV
+```
+
+### 原生协议时序（含心跳与暂停）
+
+```mermaid
+sequenceDiagram
+    participant C as 客户端 (SDK)
+    participant S as StreamingConnectionHandler
+    participant E as 引擎后端
+
+    C->>S: START (JSON)
+    S->>E: start_session()
+    S-->>C: STARTED
+    loop 会话进行中
+        C->>S: 音频帧 (binary)
+        S->>E: send_audio()
+        E-->>S: PARTIAL / FINAL
+        S-->>C: PARTIAL / FINAL
+        C->>S: PING (每 30s)
+        S-->>C: PONG (回显 client_time_ms)
+    end
+    C->>S: PAUSE
+    S-->>C: PAUSED (paused_at_ms)
+    Note over S: 暂停期间丢弃音频帧
+    C->>S: RESUME
+    S-->>C: RESUMED (resumed_at_ms)
+    C->>S: STOP
+    S->>E: stop_session() (2pass 离线纠错 + 字级时间戳)
+    E-->>S: FINAL (words)
+    S-->>C: CLOSED
+    Note over S: 90s 无任何消息 → ERROR + 断开
+```
+
 ## 鉴权
 
 所有端点均通过 Query 参数 `token` 鉴权：

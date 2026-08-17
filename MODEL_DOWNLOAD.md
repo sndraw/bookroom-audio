@@ -209,7 +209,7 @@ python -m bookroom_audio.server
 | 引擎 | 需要下载的模型 | 说明 |
 |------|--------------|------|
 | `funasr-server` | 无需下载（代理外部服务） | 外部 FunASR 服务自行管理模型 |
-| `funasr-local` | paraformer-zh-streaming + fsmn-vad + ct-punc | 进程内 FunASR 流式 |
+| `funasr-local` | paraformer-zh-streaming + **paraformer-zh** + fsmn-vad + ct-punc | 进程内 FunASR 流式；paraformer-zh 为 2pass 离线纠错模型（FINAL 阶段整句重识别 + 字级时间戳） |
 | `sensevoice-local` | SenseVoiceSmall + fsmn-vad | 进程内 SenseVoice |
 
 ### FunASR 流式模型下载
@@ -223,6 +223,9 @@ export HF_ENDPOINT=https://www.modelscope.cn
 # Paraformer-zh-streaming（流式语音识别主模型）
 huggingface-cli download iic/speech_paraformer-large_asr_nat-zh-cn-16k-common-vocab8404-online
 
+# Paraformer-zh（2pass 离线精确模型，FINAL 阶段整句重识别纠正同音字错误，并输出字级时间戳）
+huggingface-cli download iic/speech_paraformer-large_asr_nat-zh-cn-16k-common-vocab8404-pytorch
+
 # FSMN-VAD（端点检测）
 huggingface-cli download iic/speech_fsmn_vad_zh-cn-16k-common-pytorch
 
@@ -233,6 +236,7 @@ huggingface-cli download iic/punc_ct-transformer_cn-en-common-vocab471067-large
 或在 `.env` 中指定本地模型路径：
 ```bash
 STREAMING_ASR_MODEL=/path/to/paraformer-zh-streaming
+STREAMING_OFFLINE_MODEL=/path/to/paraformer-zh
 STREAMING_VAD_MODEL=/path/to/fsmn-vad
 STREAMING_PUNC_MODEL=/path/to/ct-punc
 ```

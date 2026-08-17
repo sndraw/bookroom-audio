@@ -84,7 +84,58 @@ const response = await fetch('http://localhost:15231/v1/tts/generate', {
 
 > 协议细节与 SDK 用法见 [docs/INTEGRATION.md](docs/INTEGRATION.md)，服务端配置见 [docs/CONFIGURATION.md](docs/CONFIGURATION.md)。
 
-#### WebSocket 端点
+## 🏗️ 系统架构
+
+```mermaid
+flowchart TB
+    subgraph 客户端
+        SDK["TypeScript SDK<br/>@bookroom/audio-sdk"]
+        DEMO["浏览器 Demo<br/>(demo/, Vite + TS)"]
+        FUNASR["FunASR 官方客户端<br/>Python/Java/JS/C++"]
+    end
+
+    subgraph bookroom-audio 服务端
+        subgraph WebSocket 端点
+            NATIVE["/v1/audio/streaming/transcriptions<br/>原生协议"]
+            COMPAT["/v1/audio/streaming/funasr<br/>FunASR 兼容协议"]
+        end
+
+        HANDLER["StreamingConnectionHandler<br/>鉴权 · 心跳保活(PING/PONG) · 暂停/恢复(PAUSE/RESUME)<br/>心跳超时 90s 主动断开"]
+
+        subgraph 引擎层
+            FL["funasr-local<br/>Paraformer-zh-streaming 流式"]
+            SV["sensevoice-local<br/>SenseVoiceSmall + fsmn-vad"]
+            FS["funasr-server<br/>代理外部 FunASR"]
+        end
+    end
+
+    subgraph 模型层
+        M_STREAM["paraformer-zh-streaming<br/>流式 PARTIAL"]
+        M_OFFLINE["paraformer-zh<br/>2pass 离线精确纠错<br/>+ 字级时间戳"]
+        M_PUNC["ct-punc<br/>标点恢复"]
+        M_VAD["fsmn-vad<br/>端点检测"]
+        M_SV["SenseVoiceSmall<br/>情感/事件检测"]
+    end
+
+    SDK --> NATIVE
+    DEMO --> NATIVE
+    FUNASR --> COMPAT
+    NATIVE --> HANDLER
+    COMPAT --> HANDLER
+    HANDLER --> FL
+    HANDLER --> SV
+    HANDLER --> FS
+    FL --> M_STREAM
+    FL --> M_OFFLINE
+    FL --> M_PUNC
+    FL --> M_VAD
+    SV --> M_SV
+    SV --> M_VAD
+```
+
+> **2pass 纠错**：`funasr-local` 引擎在 PARTIAL 阶段用流式模型实时输出；会话 STOP 时用 `paraformer-zh` 离线模型对整段音频重新识别（纠正同音字错误）并生成**字级时间戳**，再经 `ct-punc` 加标点输出 FINAL。
+
+### WebSocket 端点
 ```
 ws://<host>:<port>/v1/audio/streaming/transcriptions?token=<api_key>
 ```
