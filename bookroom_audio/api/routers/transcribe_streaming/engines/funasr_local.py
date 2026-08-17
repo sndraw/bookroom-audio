@@ -5,7 +5,7 @@ FunASR 本地后端
 
 import asyncio
 import threading
-from typing import AsyncIterator, Optional, Dict, Any, List
+from typing import AsyncIterator, Optional, Dict, Any, List, Tuple
 
 from bookroom_audio.api.routers.transcribe_streaming.engines.base import (
     StreamingASRBackend,
@@ -153,17 +153,21 @@ def _get_offline_model() -> Optional[Any]:
     return _offline_model
 
 
-def _infer_offline_full(audio_bytes: bytes) -> Optional[str]:
+def _infer_offline_full(
+    audio_bytes: bytes,
+) -> Optional[Tuple[str, List[WordInfo]]]:
     """2pass 离线精确识别整段音频
 
     将整段 PCM 16k 16bit mono 音频送入 paraformer-zh 离线模型，
-    返回精确识别文本（修正流式阶段同音字错误）。
+    返回精确识别文本（修正流式阶段同音字错误）和字级时间戳。
 
     Args:
         audio_bytes: PCM 16k 16bit mono 整段音频字节
 
     Returns:
-        识别文本；None 表示模型不可用或识别失败
+        (text, words) 元组；None 表示模型不可用或识别失败。
+        text 是去空格后的自然文本；words 是字级时间戳列表（text 字段为空，
+        仅含时间戳，与 funasr-server 行为一致）。
     """
     if not audio_bytes:
         return None
@@ -182,8 +186,10 @@ def _infer_offline_full(audio_bytes: bytes) -> Optional[str]:
         # 转换为 float32 并归一化到 [-1, 1]
         audio_float32 = audio_int16.astype(np.float32) / 32768.0
 
+        # 启用 output_timestamp 获取字级时间戳
         results = offline_model.generate(
             input=audio_float32,
+            output_timestamp=True,
             # 注：paraformer-zh 自身不带 VAD，整段音频视为单句
         )
         if results:
@@ -193,12 +199,49 @@ def _infer_offline_full(audio_bytes: bytes) -> Optional[str]:
             # 因为英文场景下 paraformer-zh 同样以字为单位输出）
             if text:
                 text = text.replace(" ", "")
-            return text if text else None
+
+            # 解析字级时间戳
+            words = _parse_offline_timestamps(
+                results[0].get("timestamp"),
+            )
+
+            if not text:
+                return None
+            return (text, words)
     except Exception as e:
         logger.warning(
             f"[FunASR-Local] Offline inference failed: {e}"
         )
     return None
+
+
+def _parse_offline_timestamps(
+    timestamp_raw: Any,
+) -> List[WordInfo]:
+    """解析 paraformer-zh 离线模型返回的字级时间戳
+
+    funasr 返回格式：[[start_ms, end_ms], ...]，每个元素对应一个字。
+    字的文本难以准确对应（funasr 不直接提供字-text 映射），
+    因此 text 字段留空，仅保留时间戳（与 funasr-server 行为一致）。
+    """
+    if not timestamp_raw:
+        return []
+
+    words: List[WordInfo] = []
+    try:
+        for ts in timestamp_raw:
+            if isinstance(ts, (list, tuple)) and len(ts) >= 2:
+                words.append(WordInfo(
+                    text="",
+                    start_ms=int(ts[0]),
+                    end_ms=int(ts[1]),
+                ))
+    except (TypeError, ValueError) as e:
+        logger.warning(
+            f"[FunASR-Local] Parse timestamps failed: {e}"
+        )
+        return []
+    return words
 
 
 def _get_funasr_model() -> Any:
@@ -491,26 +534,30 @@ class FunASRLocalBackend(StreamingASRBackend):
         session_audio: bytearray = getattr(
             session, "_session_audio", bytearray()
         )
-        offline_text: Optional[str] = None
+        offline_result: Optional[Tuple[str, List[WordInfo]]] = None
         if len(session_audio) > 0:
-            offline_text = await loop.run_in_executor(
+            offline_result = await loop.run_in_executor(
                 None,
                 _infer_offline_full,
                 bytes(session_audio),
             )
 
         # 3. 选择 FINAL 文本：offline 优先，失败回退到流式累积
-        if offline_text:
+        final_words: List[WordInfo] = []
+        if offline_result is not None:
+            offline_text, offline_words = offline_result
             # offline 模型已修正同音字等错误，再应用标点恢复
             final_text = await loop.run_in_executor(
                 None,
                 _apply_punc,
                 offline_text,
             )
+            final_words = offline_words
             logger.info(
                 f"[FunASR-Local] 2pass FINAL (offline): "
                 f"streaming='{accumulated_text}' → "
-                f"offline='{offline_text}' → punc='{final_text}'"
+                f"offline='{offline_text}' → punc='{final_text}' "
+                f"({len(final_words)} timestamps)"
             )
         elif accumulated_text:
             # offline 不可用时，回退到流式累积 + 标点
@@ -544,6 +591,7 @@ class FunASRLocalBackend(StreamingASRBackend):
             sentence_id=last_partial.sentence_id if last_partial else 0,
             start_ms=last_partial.start_ms if last_partial else 0,
             end_ms=session.total_audio_ms,
+            words=final_words,
         ))
 
         session.mark_stopped()

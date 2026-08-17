@@ -181,6 +181,8 @@ class SenseVoiceLocalBackend(StreamingASRBackend):
         setattr(session, "_vad_cache", {})
         setattr(session, "_sentence_count", 0)
         setattr(session, "_last_vad_ms", 0)
+        # 已识别到的音频位置（毫秒），避免重复识别
+        setattr(session, "_last_processed_ms", 0)
         return session
 
     async def send_audio(
@@ -265,16 +267,28 @@ class SenseVoiceLocalBackend(StreamingASRBackend):
         vad_results: List[Dict[str, Any]],
         session: StreamingSession,
     ) -> List[tuple[bytes, int, int]]:
-        """从 VAD 结果提取已完成的语音段"""
+        """从 VAD 结果提取已完成的语音段
+
+        fsmn-vad 返回 value=[[start_ms, end_ms], ...]，最后一个段是
+        "活跃段"（尚未结束），除非 is_final=True。前面的段都已完成。
+
+        通过 _last_processed_ms 跳过已识别的段，避免重复识别。
+        """
         segments: List[tuple[bytes, int, int]] = []
         buffer: bytearray = getattr(session, "_audio_buffer")
+        last_processed_ms: int = getattr(session, "_last_processed_ms", 0)
 
         for vad_res in vad_results:
             value = vad_res.get("value", [])
             if not value:
                 continue
 
-            for segment_info in value:
+            is_final = vad_res.get("is_final", False)
+            # is_final=True 时所有段都已完成；否则最后一个是活跃段
+            last_idx = len(value) if is_final else max(len(value) - 1, 0)
+
+            for idx in range(last_idx):
+                segment_info = value[idx]
                 if not isinstance(segment_info, list):
                     continue
                 if len(segment_info) < 2:
@@ -283,12 +297,11 @@ class SenseVoiceLocalBackend(StreamingASRBackend):
                 start_ms = int(segment_info[0])
                 end_ms = int(segment_info[1])
 
-                # 只处理已完成且静音超过阈值的段
-                silence_duration = session.total_audio_ms - end_ms
-                if silence_duration < silence_check_threshold(session):
+                # 跳过已处理的段
+                if end_ms <= last_processed_ms:
                     continue
 
-                start_byte = start_ms * PCM_BYTES_PER_MS
+                start_byte = max(start_ms, last_processed_ms) * PCM_BYTES_PER_MS
                 end_byte = end_ms * PCM_BYTES_PER_MS
 
                 if end_byte > len(buffer):
@@ -297,7 +310,10 @@ class SenseVoiceLocalBackend(StreamingASRBackend):
                 segment_audio = bytes(buffer[start_byte:end_byte])
                 if len(segment_audio) > 0:
                     segments.append((segment_audio, start_ms, end_ms))
+                    if end_ms > last_processed_ms:
+                        last_processed_ms = end_ms
 
+        setattr(session, "_last_processed_ms", last_processed_ms)
         return segments
 
     def _recognize_segment(
@@ -406,19 +422,22 @@ class SenseVoiceLocalBackend(StreamingASRBackend):
     async def stop_session(self, session: StreamingSession) -> None:
         """停止会话，处理剩余音频
 
-        在停止时，对 buffer 中所有未识别的音频做最终识别。
+        只识别 _last_processed_ms 之后的未识别部分，避免重复识别。
         """
         buffer: bytearray = getattr(session, "_audio_buffer", bytearray())
+        last_processed_ms: int = getattr(session, "_last_processed_ms", 0)
+        last_processed_byte = last_processed_ms * PCM_BYTES_PER_MS
 
-        # 处理剩余音频（即使小于阈值也识别，确保不丢内容）
-        if len(buffer) > 0:
+        # 只处理未识别的部分
+        if len(buffer) > last_processed_byte:
+            remaining_audio = bytes(buffer[last_processed_byte:])
             loop = asyncio.get_event_loop()
             await loop.run_in_executor(
                 None,
                 self._recognize_segment,
                 session,
-                bytes(buffer),
-                0,
+                remaining_audio,
+                last_processed_ms,
                 session.total_audio_ms,
             )
 
@@ -426,8 +445,3 @@ class SenseVoiceLocalBackend(StreamingASRBackend):
         logger.info(
             f"[SenseVoice] Session {session.session_id} closed"
         )
-
-
-def silence_check_threshold(session: StreamingSession) -> int:
-    """计算静音检测阈值"""
-    return session.config.max_sentence_silence_ms

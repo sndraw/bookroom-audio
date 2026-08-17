@@ -40,6 +40,9 @@ class ClientMessageType(str, Enum):
     START = "start"
     AUDIO = "audio"
     STOP = "stop"
+    PING = "ping"
+    PAUSE = "pause"
+    RESUME = "resume"
 
 
 class ServerMessageType(str, Enum):
@@ -49,6 +52,9 @@ class ServerMessageType(str, Enum):
     FINAL = "final"
     ERROR = "error"
     CLOSED = "closed"
+    PONG = "pong"
+    PAUSED = "paused"
+    RESUMED = "resumed"
 
 
 class ErrorCode(str, Enum):
@@ -84,6 +90,10 @@ DEFAULT_DECODER_CHUNK_LOOK_BACK = 1
 WS_RECEIVE_BUFFER_BYTES = 1024 * 1024  # 1MB
 WS_SEND_QUEUE_MAXSIZE = 100
 WS_IDLE_TIMEOUT_SECONDS = 300  # 5分钟无活动断开
+
+# 心跳与保活配置
+# 客户端建议每 30s 发送 PING；服务端 90s 未收到任何消息则主动断开
+WS_HEARTBEAT_TIMEOUT_SECONDS = 90  # 心跳超时阈值（无任何消息则断开）
 
 # 会话清理间隔
 SESSION_CLEANUP_INTERVAL_SECONDS = 60

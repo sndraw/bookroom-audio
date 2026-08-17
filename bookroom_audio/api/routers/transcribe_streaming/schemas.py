@@ -157,6 +157,40 @@ class ClosedMessage(BaseModel):
         use_enum_values = True
 
 
+class PongMessage(BaseModel):
+    """心跳响应消息"""
+    type: ServerMessageType = Field(default=ServerMessageType.PONG)
+    session_id: Optional[str] = Field(default=None, description="会话 ID")
+    server_time_ms: int = Field(description="服务端时间戳（毫秒）")
+    client_time_ms: Optional[int] = Field(
+        default=None,
+        description="回显客户端 PING 中的时间戳"
+    )
+
+    class Config:
+        use_enum_values = True
+
+
+class PausedMessage(BaseModel):
+    """会话已暂停消息"""
+    type: ServerMessageType = Field(default=ServerMessageType.PAUSED)
+    session_id: str = Field(description="会话 ID")
+    paused_at_ms: int = Field(description="暂停时已识别音频时长（毫秒）")
+
+    class Config:
+        use_enum_values = True
+
+
+class ResumedMessage(BaseModel):
+    """会话已恢复消息"""
+    type: ServerMessageType = Field(default=ServerMessageType.RESUMED)
+    session_id: str = Field(description="会话 ID")
+    resumed_at_ms: int = Field(description="恢复时已识别音频时长（毫秒）")
+
+    class Config:
+        use_enum_values = True
+
+
 # ==================== 引擎结果模型 ====================
 
 class ASRResult(BaseModel):

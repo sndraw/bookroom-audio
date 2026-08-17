@@ -122,6 +122,26 @@ START 后，客户端通过 WebSocket 二进制帧持续发送音频数据：
 
 发送后服务端会推送剩余的 FINAL 结果，再发送 CLOSED 消息并关闭连接。
 
+**4. PING - 心跳保活**
+
+```json
+{"type": "ping", "timestamp_ms": 1723800000000}
+```
+
+建议每 30 秒发送一次。服务端立即回 PONG（含 `client_time_ms` 回显，可用于计算 RTT）。**服务端超过 90 秒未收到任何消息（含音频帧）会主动断开**，长连接务必启用心跳。
+
+**5. PAUSE / RESUME - 暂停 / 恢复**
+
+```json
+{"type": "pause"}
+{"type": "resume"}
+```
+
+- `PAUSE`：暂停音频处理。暂停期间服务端**丢弃**收到的音频帧，不送入引擎。
+- `RESUME`：恢复处理。
+- 服务端分别回 `paused` / `resumed` 消息确认，重复发送同类型请求会被忽略（幂等）。
+- 场景：用户点击「静音/暂停」时，暂停期间的服务端音频不做识别，恢复后继续。
+
 #### 服务端 → 客户端
 
 **1. STARTED - 会话已启动**
@@ -187,7 +207,37 @@ PARTIAL 序列示例（`text` 不断增长，非单 chunk 增量）：
 
 错误码包括：`auth_failed` / `invalid_config` / `engine_unavailable` / `audio_decode_failed` / `session_not_found` / `internal_error` 等。
 
-**5. CLOSED - 连接关闭**
+**6. PONG - 心跳响应**
+
+```json
+{
+  "type": "pong",
+  "session_id": "uuid-xxxx",
+  "server_time_ms": 1723800000000,
+  "client_time_ms": 1723800000000
+}
+```
+
+`client_time_ms` 为回显客户端 PING 中的时间戳；客户端可用 `RTT ≈ now - client_time_ms` 估算网络延迟。
+
+**7. PAUSED / RESUMED - 暂停 / 恢复确认**
+
+```json
+{
+  "type": "paused",
+  "session_id": "uuid-xxxx",
+  "paused_at_ms": 4200
+}
+{
+  "type": "resumed",
+  "session_id": "uuid-xxxx",
+  "resumed_at_ms": 8700
+}
+```
+
+`paused_at_ms` / `resumed_at_ms` 为操作发生时已累积的音频时长（毫秒）。
+
+**8. CLOSED - 连接关闭**
 
 ```json
 {
@@ -336,11 +386,22 @@ const client = new BookRoomASRClient(
     url: 'ws://127.0.0.1:15231/v1/audio/streaming/transcriptions',
     apiKey: 'YOUR_KEY',
     mode: 'native', // 或 'funasr'
+    // 增强能力（均可选）：
+    heartbeatInterval: 30000, // 心跳间隔 ms，0 关闭（默认 30000）
+    reconnect: 3,             // 断线自动重连次数，0 关闭（默认 0）
+    reconnectInterval: 1000,  // 重连初始延迟 ms（默认 1000，指数退避）
+    reconnectMaxInterval: 30000, // 重连最大延迟 ms（默认 30000）
   },
   {
     onStarted: (msg) => console.log('Session:', msg.session_id),
     onPartial: (text) => console.log('Partial:', text),
     onFinal: (text) => console.log('Final:', text),
+    onPong: (msg, rttMs) => console.log('RTT:', rttMs, 'ms'),
+    onPaused: (msg) => console.log('Paused at', msg.paused_at_ms),
+    onResumed: (msg) => console.log('Resumed at', msg.resumed_at_ms),
+    onReconnectAttempt: (attempt, delayMs) =>
+      console.log(`Reconnect ${attempt} in ${delayMs}ms`),
+    onClosed: (msg) => console.log('Closed:', msg.reason),
   },
 );
 
@@ -349,6 +410,10 @@ await client.start({
   audio_format: 'pcm',
   sample_rate: 16000,
 });
+
+// 暂停 / 恢复（仅 native 模式，收到 paused/resumed 后状态切换）
+await client.pause();   // 暂停期间服务端丢弃音频
+await client.resume();  // 恢复
 
 // 启动麦克风
 const mic = new MicCapturer(
@@ -360,7 +425,11 @@ await mic.start();
 // 停止
 await client.stop();
 mic.stop();
+// 主动关闭（不触发重连）
+client.close();
 ```
+
+> **重连与恢复**：启用 `reconnect > 0` 后，异常断线会自动指数退避重连（带 ±25% 抖动），重连成功后自动重发 START 恢复会话；用户主动 `close()` 不会重连。
 
 ### Node.js 使用
 
@@ -426,6 +495,19 @@ python -m tests.streaming_asr.test_native
 
 # FunASR 兼容端点
 python -m tests.streaming_asr.test_funasr_compat
+```
+
+### 单元测试（无需服务器与模型）
+
+新增功能的纯单元测试，不依赖真实服务器与模型，可在开发环境直接运行：
+
+```bash
+# 后端：心跳 / 暂停恢复 / 心跳超时 / 字级时间戳 / SenseVoice 去重
+python -m unittest tests.streaming_asr.test_protocol_features -v
+
+# SDK：心跳 / pause-resume / 指数退避重连 / 主动关闭不重连
+cd sdk/typescript
+npm run build && npm test
 ```
 
 ### 测试验证内容

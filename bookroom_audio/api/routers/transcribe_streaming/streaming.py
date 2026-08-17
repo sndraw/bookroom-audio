@@ -5,6 +5,7 @@
 
 import asyncio
 import json
+import time
 from typing import Optional
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends, Query
@@ -18,6 +19,7 @@ from bookroom_audio.api.routers.transcribe_streaming.constants import (
     AudioFormat,
     WS_IDLE_TIMEOUT_SECONDS,
     WS_RECEIVE_BUFFER_BYTES,
+    WS_HEARTBEAT_TIMEOUT_SECONDS,
 )
 from bookroom_audio.api.routers.transcribe_streaming.schemas import (
     StartMessage,
@@ -27,6 +29,9 @@ from bookroom_audio.api.routers.transcribe_streaming.schemas import (
     FinalMessage,
     ErrorMessage,
     ClosedMessage,
+    PongMessage,
+    PausedMessage,
+    ResumedMessage,
     StreamingSessionConfig,
 )
 from bookroom_audio.api.routers.transcribe_streaming.engines.base import (
@@ -53,6 +58,8 @@ class StreamingConnectionHandler:
     - 接收 START 配置
     - 创建引擎会话
     - 并发：接收音频 + 推送结果
+    - 心跳保活（PING/PONG）
+    - 暂停/恢复（PAUSE/RESUME）
     - 停止和清理
     """
 
@@ -68,6 +75,10 @@ class StreamingConnectionHandler:
         self._recv_task: Optional[asyncio.Task] = None
         self._push_task: Optional[asyncio.Task] = None
         self._is_closing = False
+        # 暂停状态：暂停期间丢弃音频帧，不转发到引擎
+        self._paused = False
+        # 最近一次收到任意消息的时间戳（用于心跳超时判定）
+        self._last_recv_time: float = time.monotonic()
 
     async def handle(self) -> None:
         """处理整个连接生命周期"""
@@ -193,15 +204,35 @@ class StreamingConnectionHandler:
         # push_task 会在 stop_session 后，队列处理完自然退出
 
     async def _receive_audio_loop(self) -> None:
-        """接收客户端消息循环"""
+        """接收客户端消息循环
+
+        支持心跳超时检测：超过 WS_HEARTBEAT_TIMEOUT_SECONDS
+        未收到任何消息则主动断开。
+        """
         while not self._is_closing:
             try:
-                message = await self.websocket.receive()
+                message = await asyncio.wait_for(
+                    self.websocket.receive(),
+                    timeout=WS_HEARTBEAT_TIMEOUT_SECONDS,
+                )
+            except asyncio.TimeoutError:
+                logger.warning(
+                    f"Heartbeat timeout ({WS_HEARTBEAT_TIMEOUT_SECONDS}s), "
+                    f"closing connection"
+                )
+                await self._send_error(
+                    ErrorCode.SESSION_NOT_FOUND,
+                    "Heartbeat timeout: no message received",
+                )
+                break
             except WebSocketDisconnect:
                 break
             except Exception as e:
                 logger.error(f"Receive error: {e}")
                 break
+
+            # 更新最近接收时间（任意消息都算保活）
+            self._last_recv_time = time.monotonic()
 
             if "bytes" in message:
                 # 音频二进制帧
@@ -215,8 +246,15 @@ class StreamingConnectionHandler:
                     break
 
     async def _handle_audio_chunk(self, chunk: bytes) -> None:
-        """处理音频块"""
+        """处理音频块
+
+        暂停期间丢弃音频，不转发到引擎。
+        """
         if self.session is None or self.backend is None:
+            return
+
+        # 暂停期间丢弃音频
+        if self._paused:
             return
 
         # 解码为 PCM
@@ -272,7 +310,61 @@ class StreamingConnectionHandler:
             )
             return False
 
+        if msg_type == ClientMessageType.PING.value:
+            await self._handle_ping(data)
+            return False
+
+        if msg_type == ClientMessageType.PAUSE.value:
+            await self._handle_pause()
+            return False
+
+        if msg_type == ClientMessageType.RESUME.value:
+            await self._handle_resume()
+            return False
+
         return False
+
+    async def _handle_ping(self, data: dict) -> None:
+        """处理 PING 心跳，立即回 PONG"""
+        client_time_ms = data.get("timestamp_ms")
+        pong_msg = PongMessage(
+            session_id=self.session.session_id if self.session else None,
+            server_time_ms=int(time.time() * 1000),
+            client_time_ms=client_time_ms,
+        )
+        await self._send_message(pong_msg.model_dump())
+
+    async def _handle_pause(self) -> None:
+        """处理 PAUSE：暂停音频处理"""
+        if self._paused:
+            return  # 已暂停，忽略重复请求
+        self._paused = True
+        if self.session is not None:
+            paused_msg = PausedMessage(
+                session_id=self.session.session_id,
+                paused_at_ms=self.session.total_audio_ms,
+            )
+            await self._send_message(paused_msg.model_dump())
+            logger.info(
+                f"Session {self.session.session_id} paused at "
+                f"{self.session.total_audio_ms}ms"
+            )
+
+    async def _handle_resume(self) -> None:
+        """处理 RESUME：恢复音频处理"""
+        if not self._paused:
+            return  # 未暂停，忽略重复请求
+        self._paused = False
+        if self.session is not None:
+            resumed_msg = ResumedMessage(
+                session_id=self.session.session_id,
+                resumed_at_ms=self.session.total_audio_ms,
+            )
+            await self._send_message(resumed_msg.model_dump())
+            logger.info(
+                f"Session {self.session.session_id} resumed at "
+                f"{self.session.total_audio_ms}ms"
+            )
 
     async def _push_results_loop(self) -> None:
         """推送识别结果到客户端

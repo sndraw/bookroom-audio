@@ -77,7 +77,12 @@ const response = await fetch('http://localhost:15231/v1/tts/generate', {
 - 支持标点恢复、ITN 数字规整
 - 支持热词、说话人分离、情感识别（视引擎能力）
 - 支持 PCM/WAV/MP3 等多种音频格式自动转换
+- **心跳保活**：客户端 PING → 服务端 PONG（带 RTT 回显）；90s 无任何消息自动断开
+- **暂停/恢复**：PAUSE/RESUME 控制音频处理，暂停期间服务端丢弃音频
+- **SDK 断线重连**：指数退避自动重连（±25% 抖动），重连后自动重发 START 恢复会话
 - WebSocket 协议：START → STARTED → audio frames → PARTIAL/FINAL → STOP → CLOSED
+
+> 协议细节与 SDK 用法见 [docs/INTEGRATION.md](docs/INTEGRATION.md)，服务端配置见 [docs/CONFIGURATION.md](docs/CONFIGURATION.md)。
 
 #### WebSocket 端点
 ```
