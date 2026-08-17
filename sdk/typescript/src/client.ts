@@ -4,6 +4,12 @@
  * 平台无关实现，支持两种协议模式：
  * - native: bookroom-audio 原生协议（START/AUDIO/STOP/PARTIAL/FINAL/CLOSED）
  * - funasr: FunASR serve_realtime_ws.py 兼容协议（init/binary/is_speaking=false）
+ *
+ * 增强能力：
+ * - 心跳保活（PING/PONG）
+ * - 暂停/恢复（PAUSE/RESUME，仅 native 模式）
+ * - 指数退避重连（带抖动，避免雪崩）
+ * - 重连后自动恢复会话（重发 START）
  */
 
 import {
@@ -17,6 +23,9 @@ import {
   StreamingSessionConfig,
   ErrorMessage,
   ClosedMessage,
+  PongMessage,
+  PausedMessage,
+  ResumedMessage,
   FunASRInitMessage,
   FunASRResponseMessage,
 } from './types';
@@ -27,12 +36,14 @@ import {
 } from './websocket';
 
 /** 默认配置值 */
-const DEFAULT_OPTIONS: Required<Pick<ClientOptions, 'mode' | 'reconnect' | 'reconnectInterval' | 'connectTimeout' | 'startTimeout'>> = {
+const DEFAULT_OPTIONS: Required<Pick<ClientOptions, 'mode' | 'reconnect' | 'reconnectInterval' | 'reconnectMaxInterval' | 'connectTimeout' | 'startTimeout' | 'heartbeatInterval'>> = {
   mode: 'native',
   reconnect: 0,
   reconnectInterval: 1000,
+  reconnectMaxInterval: 30000,
   connectTimeout: 10000,
   startTimeout: 30000,
+  heartbeatInterval: 30000,
 };
 
 const DEFAULT_SESSION_CONFIG: StreamingSessionConfig = {
@@ -71,6 +82,12 @@ export class BookRoomASRClient {
   private startResolve: ((msg: StartedMessage) => void) | null = null;
   private startReject: ((err: Error) => void) | null = null;
   private startTimer: ReturnType<typeof setTimeout> | null = null;
+  private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
+  private lastPingTime = 0;
+  // 用户主动关闭标志：区分主动 close 与异常断开，决定是否重连
+  private manuallyClosed = false;
+  // 最近一次 start 时的配置，用于重连后自动恢复会话
+  private lastStartConfig: Partial<StreamingSessionConfig> | null = null;
 
   constructor(
     options: ClientOptions,
@@ -187,6 +204,7 @@ export class BookRoomASRClient {
       ...DEFAULT_SESSION_CONFIG,
       ...config,
     };
+    this.lastStartConfig = config ?? null;
 
     // native 模式等待 STARTED 响应；funasr 模式不返回 STARTED
     if (this.options.mode === 'native') {
@@ -226,6 +244,7 @@ export class BookRoomASRClient {
       try {
         const started = await this.startPromise;
         this.setState('started');
+        this.startHeartbeat();
         return started;
       } catch (err) {
         this.started = false;
@@ -243,6 +262,7 @@ export class BookRoomASRClient {
 
     // funasr 模式：直接进入 started 状态
     this.setState('started');
+    this.startHeartbeat();
     return {
       type: 'started',
       session_id: 'funasr-compat',
@@ -262,13 +282,48 @@ export class BookRoomASRClient {
     this.send(data);
   }
 
+  /** 暂停会话（暂停期间服务端丢弃音频，仅 native 模式） */
+  async pause(): Promise<void> {
+    if (this.state !== 'started') {
+      throw new ASRClientError(
+        'invalid_state',
+        `Cannot pause from state: ${this.state}`,
+      );
+    }
+    if (this.options.mode === 'funasr') {
+      throw new ASRClientError(
+        'invalid_state',
+        'PAUSE/RESUME only supported in native mode',
+      );
+    }
+    this.send(JSON.stringify({ type: 'pause' }));
+  }
+
+  /** 恢复会话（仅 native 模式） */
+  async resume(): Promise<void> {
+    if (this.state !== 'paused') {
+      throw new ASRClientError(
+        'invalid_state',
+        `Cannot resume from state: ${this.state}`,
+      );
+    }
+    if (this.options.mode === 'funasr') {
+      throw new ASRClientError(
+        'invalid_state',
+        'PAUSE/RESUME only supported in native mode',
+      );
+    }
+    this.send(JSON.stringify({ type: 'resume' }));
+  }
+
   /** 停止会话（发送 STOP 或 is_speaking=false） */
   async stop(): Promise<void> {
-    if (this.state !== 'started') {
+    if (this.state !== 'started' && this.state !== 'paused') {
       return;
     }
 
     this.setState('stopping');
+    this.stopHeartbeat();
 
     let stopPayload: string;
     if (this.options.mode === 'funasr') {
@@ -280,13 +335,41 @@ export class BookRoomASRClient {
     this.send(stopPayload);
   }
 
-  /** 关闭连接 */
+  /** 关闭连接（不重连） */
   close(): void {
+    this.manuallyClosed = true;
     this.started = false;
+    this.stopHeartbeat();
     if (this.ws !== null && this.ws.readyState !== this.ws.CLOSED) {
       this.ws.close(1000, 'client closed');
     }
     this.setState('closed');
+  }
+
+  // ==================== 心跳 ====================
+
+  /** 启动心跳定时器 */
+  private startHeartbeat(): void {
+    if (this.options.heartbeatInterval <= 0) return;
+    this.stopHeartbeat();
+    this.heartbeatTimer = setInterval(() => {
+      if (this.state !== 'started' && this.state !== 'paused') {
+        return;
+      }
+      this.lastPingTime = Date.now();
+      this.send(JSON.stringify({
+        type: 'ping',
+        timestamp_ms: this.lastPingTime,
+      }));
+    }, this.options.heartbeatInterval);
+  }
+
+  /** 停止心跳定时器 */
+  private stopHeartbeat(): void {
+    if (this.heartbeatTimer !== null) {
+      clearInterval(this.heartbeatTimer);
+      this.heartbeatTimer = null;
+    }
   }
 
   // ==================== 内部方法 ====================
@@ -395,6 +478,26 @@ export class BookRoomASRClient {
         this.setState('closed');
         break;
       }
+      case 'pong': {
+        const pong = msg as unknown as PongMessage;
+        const rttMs = this.lastPingTime > 0
+          ? Date.now() - this.lastPingTime
+          : 0;
+        this.callbacks.onPong?.(pong, rttMs);
+        break;
+      }
+      case 'paused': {
+        const paused = msg as unknown as PausedMessage;
+        this.setState('paused');
+        this.callbacks.onPaused?.(paused);
+        break;
+      }
+      case 'resumed': {
+        const resumed = msg as unknown as ResumedMessage;
+        this.setState('started');
+        this.callbacks.onResumed?.(resumed);
+        break;
+      }
       default:
         break;
     }
@@ -455,8 +558,11 @@ export class BookRoomASRClient {
       this.startReject = null;
     }
 
-    const wasActive = this.state === 'started' || this.state === 'stopping';
+    const wasActive = this.state === 'started'
+      || this.state === 'paused'
+      || this.state === 'stopping';
     this.started = false;
+    this.stopHeartbeat();
 
     // 触发 closed 回调（如果之前是活跃状态）
     if (wasActive) {
@@ -467,22 +573,58 @@ export class BookRoomASRClient {
       });
     }
 
-    // 重连逻辑
-    if (this.options.reconnect > 0 && this.reconnectAttempts < this.options.reconnect) {
+    // 用户主动 close 时不重连
+    if (this.manuallyClosed) {
+      this.setState('closed');
+      return;
+    }
+
+    // 指数退避重连
+    if (
+      this.options.reconnect > 0
+      && this.reconnectAttempts < this.options.reconnect
+    ) {
+      // 先重置为 closed，使 connect() 的状态校验通过
+      this.setState('closed');
       this.reconnectAttempts++;
+      const delayMs = this.computeReconnectDelay();
+      this.callbacks.onReconnectAttempt?.(
+        this.reconnectAttempts,
+        delayMs,
+      );
       setTimeout(() => {
-        this.connect().catch((err) => {
+        this.reconnectAndRecover().catch((err) => {
           this.callbacks.onError?.({
             type: 'error',
             code: 'reconnect_failed',
             message: err.message,
           });
         });
-      }, this.options.reconnectInterval);
+      }, delayMs);
       return;
     }
 
     this.setState('closed');
+  }
+
+  /** 计算指数退避延迟（带 ±25% 抖动，防止雪崩） */
+  private computeReconnectDelay(): number {
+    const base = this.options.reconnectInterval;
+    const max = this.options.reconnectMaxInterval;
+    // 指数退避：base * 2^(attempt-1)
+    const exponential = base * Math.pow(2, this.reconnectAttempts - 1);
+    const capped = Math.min(exponential, max);
+    // 抖动：±25% 防止雪崩
+    const jitter = capped * (0.75 + Math.random() * 0.5);
+    return Math.round(jitter);
+  }
+
+  /** 重连并尝试恢复会话（重发 START，cache 已丢失） */
+  private async reconnectAndRecover(): Promise<void> {
+    await this.connect();
+    if (this.lastStartConfig !== null) {
+      await this.start(this.lastStartConfig);
+    }
   }
 
   /** 更新状态并触发回调 */

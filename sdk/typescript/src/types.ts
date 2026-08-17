@@ -43,7 +43,7 @@ export type ErrorCode =
   | 'not_connected';
 
 /** 客户端消息类型 */
-export type ClientMessageType = 'start' | 'audio' | 'stop';
+export type ClientMessageType = 'start' | 'audio' | 'stop' | 'ping' | 'pause' | 'resume';
 
 /** 服务端消息类型 */
 export type ServerMessageType =
@@ -51,7 +51,10 @@ export type ServerMessageType =
   | 'partial'
   | 'final'
   | 'error'
-  | 'closed';
+  | 'closed'
+  | 'pong'
+  | 'paused'
+  | 'resumed';
 
 // ==================== 会话配置 ====================
 
@@ -95,12 +98,16 @@ export interface ClientOptions {
   subprotocol?: string;
   /** 自动重连次数，默认 0（不重连） */
   reconnect?: number;
-  /** 重连间隔（毫秒），默认 1000 */
+  /** 重连初始间隔（毫秒），默认 1000；后续指数退避 */
   reconnectInterval?: number;
+  /** 重连最大间隔（毫秒），默认 30000 */
+  reconnectMaxInterval?: number;
   /** 连接超时（毫秒），默认 10000 */
   connectTimeout?: number;
   /** START 消息等待超时（毫秒），默认 30000 */
   startTimeout?: number;
+  /** 心跳间隔（毫秒），默认 30000；设为 0 关闭心跳 */
+  heartbeatInterval?: number;
 }
 
 // ==================== 服务端消息 ====================
@@ -166,13 +173,38 @@ export interface ClosedMessage {
   reason?: string;
 }
 
+/** PONG 心跳响应 */
+export interface PongMessage {
+  type: 'pong';
+  session_id?: string;
+  server_time_ms: number;
+  client_time_ms?: number;
+}
+
+/** PAUSED 消息 */
+export interface PausedMessage {
+  type: 'paused';
+  session_id: string;
+  paused_at_ms: number;
+}
+
+/** RESUMED 消息 */
+export interface ResumedMessage {
+  type: 'resumed';
+  session_id: string;
+  resumed_at_ms: number;
+}
+
 /** 服务端消息联合类型 */
 export type ServerMessage =
   | StartedMessage
   | PartialMessage
   | FinalMessage
   | ErrorMessage
-  | ClosedMessage;
+  | ClosedMessage
+  | PongMessage
+  | PausedMessage
+  | ResumedMessage;
 
 // ==================== 客户端状态 ====================
 
@@ -182,6 +214,7 @@ export type ClientState =
   | 'connecting'  // 连接中
   | 'connected'   // 已连接，未启动会话
   | 'started'     // 会话已启动，可发送音频
+  | 'paused'      // 会话已暂停（不接受音频）
   | 'stopping'    // 已发 STOP，等待 FINAL
   | 'closed';     // 已关闭
 
@@ -201,6 +234,14 @@ export interface ClientCallbacks {
   onClosed?: (msg: ClosedMessage) => void;
   /** 状态变化 */
   onStateChange?: (state: ClientState) => void;
+  /** 心跳响应（可用于计算往返时延） */
+  onPong?: (msg: PongMessage, rttMs: number) => void;
+  /** 会话已暂停 */
+  onPaused?: (msg: PausedMessage) => void;
+  /** 会话已恢复 */
+  onResumed?: (msg: ResumedMessage) => void;
+  /** 重连尝试中 */
+  onReconnectAttempt?: (attempt: number, delayMs: number) => void;
 }
 
 // ==================== FunASR 兼容模式消息 ====================
