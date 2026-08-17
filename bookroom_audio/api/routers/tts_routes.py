@@ -3,7 +3,9 @@ TTS routes - API endpoints for text-to-speech functionality.
 """
 
 import asyncio
+import base64
 import io
+import json
 from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -29,6 +31,7 @@ from bookroom_audio.api.routers.tts.engines import (
     generate_audio_chatt,
     generate_audio_edge_tts,
     generate_audio_pyttsx3,
+    stream_tts_edge_with_words,
     EDGE_TTS_AVAILABLE,
     PYTTSX3_AVAILABLE,
 )
@@ -221,5 +224,53 @@ def create_tts_routes(args: Any, api_key: Optional[str] = None):
                 "success": False,
                 "message": f"Error loading model: {str(e)}",
             }
+
+    @router.post(
+        "/stream",
+        response_class=StreamingResponse,
+        dependencies=[Depends(optional_api_key)],
+        summary="Stream speech with word boundaries",
+        description="Edge TTS 流式生成，SSE 输出：先 words（词边界时间戳，viseme 口型驱动用），再 audio chunk（WAV base64）。",
+        operation_id="stream_tts_with_words",
+    )
+    async def stream_tts(request: TTSRequest):
+        if not request.text or not request.text.strip():
+            raise HTTPException(status_code=400, detail="No text provided")
+        if not EDGE_TTS_AVAILABLE:
+            raise HTTPException(status_code=500, detail="Edge TTS not available")
+
+        from bookroom_audio.api.routers.tts.utils import parse_rate, parse_volume
+
+        rate = parse_rate(request.rate)
+        volume = parse_volume(request.volume)
+        voice = request.voice or request.voice_id
+
+        def sse_gen():
+            try:
+                wav, words = asyncio.run(
+                    stream_tts_edge_with_words(
+                        text=request.text,
+                        voice=voice,
+                        rate=rate,
+                        volume=volume,
+                        target_sample_rate=request.sample_rate,
+                    )
+                )
+            except Exception as e:  # noqa: BLE001
+                yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
+                return
+
+            yield f"data: {json.dumps({'type': 'words', 'words': words})}\n\n"
+            chunk_size = 4096
+            for i in range(0, len(wav), chunk_size):
+                chunk = base64.b64encode(wav[i : i + chunk_size]).decode()
+                yield f"data: {json.dumps({'type': 'audio', 'chunk': chunk})}\n\n"
+            yield 'data: {"type": "end"}\n\n'
+
+        return StreamingResponse(
+            sse_gen(),
+            media_type="text/event-stream",
+            headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        )
 
     return router

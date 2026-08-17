@@ -95,9 +95,97 @@ async def generate_audio_edge_tts(
     return out_buf.getvalue()
 
 
+def _split_sentence_to_visemes(sentence: str, start_ms: float, duration_ms: float) -> list[dict]:
+    """
+    将一句文本切成口型驱动单元（viseme），句内时长按字符均分近似。
+    - 中文：逐字（跳过空白与标点，标点处不计口型、不占时长权重）
+    - 英文：按空格分词
+    返回 [{"text","start_ms","end_ms"}]
+    """
+    import re
+
+    units: list[str] = []
+    if re.search(r"[\u4e00-\u9fff]", sentence):
+        # 中文：逐字（保留中文与字母数字，跳过标点空白）
+        for ch in sentence:
+            if ch.strip() and not re.match(r"[，。！？、；：""''（）\s]", ch):
+                units.append(ch)
+    else:
+        units = [w for w in sentence.split() if w]
+
+    if not units:
+        return []
+    seg = duration_ms / len(units)
+    words = []
+    for i, u in enumerate(units):
+        words.append({
+            "text": u,
+            "start_ms": round(start_ms + i * seg, 1),
+            "end_ms": round(start_ms + (i + 1) * seg, 1),
+        })
+    return words
+
+
+async def stream_tts_edge_with_words(
+    text: str,
+    voice: Optional[str] = None,
+    rate: str = "0%",
+    volume: str = "0%",
+    target_sample_rate: int = 16000,
+) -> tuple[bytes, list[dict]]:
+    """
+    Edge TTS 生成音频 + viseme 时间戳（口型驱动）。
+    edge-tts 中文仅返回句级 SentenceBoundary → 按句时长 + 逐字均分近似。
+
+    Returns:
+        (wav_bytes, words) 其中 words: [{"text", "start_ms", "end_ms"}]
+    """
+    from bookroom_audio.api.routers.tts.constants import EDGE_TTS_VOICES
+    from bookroom_audio.api.routers.tts.utils import get_default_edge_voice
+
+    if not voice:
+        voice = get_default_edge_voice(text)
+    if voice not in EDGE_TTS_VOICES:
+        raise ValueError(f"Unsupported voice: {voice}. Available voices: {EDGE_TTS_VOICES}")
+
+    communicate = edge_tts.Communicate(text, voice, rate=rate, volume=volume)
+
+    mp3_chunks: list[bytes] = []
+    sentence_bounds: list[tuple[float, float, str]] = []  # (start_ms, duration_ms, text)
+
+    async for chunk in communicate.stream():
+        t = chunk["type"]
+        if t == "audio":
+            mp3_chunks.append(chunk["data"])
+        elif t == "SentenceBoundary":
+            offset_ticks = chunk.get("offset", 0)
+            duration_ticks = chunk.get("duration", 0)
+            sentence_bounds.append((
+                offset_ticks / 10000,
+                duration_ticks / 10000,
+                chunk.get("text", ""),
+            ))
+
+    mp3 = b"".join(mp3_chunks)
+    audio = AudioSegment.from_file(io.BytesIO(mp3), format="mp3")
+    audio = audio.set_frame_rate(target_sample_rate)
+    out_buf = io.BytesIO()
+    audio.export(out_buf, format="wav")
+
+    # 无句级边界时（退化）：按整段音频时长均分
+    words: list[dict] = []
+    if not sentence_bounds and mp3:
+        total_ms = len(audio)
+        words = _split_sentence_to_visemes(text, 0, total_ms)
+    else:
+        for start_ms, dur_ms, sentence in sentence_bounds:
+            words.extend(_split_sentence_to_visemes(sentence, start_ms, dur_ms))
+
+    return out_buf.getvalue(), words
+
+
 # pyttsx3 线程本地存储
 _local_engine_storage = threading.local()
-
 
 def get_thread_local_pyttsx3_engine():
     """获取线程本地的 pyttsx3 引擎实例"""

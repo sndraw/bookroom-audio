@@ -1,6 +1,10 @@
+# bookroom-audio 独立部署（与 bookroom-ai/docker-deploy 分离，避免 project 名冲突）
+name: bookroom-audio
+
 services:
   audio:
     image: bookroom-audio:latest
+    container_name: bookroom-audio
     build:
       context: ..
       args:
@@ -11,6 +15,8 @@ services:
     restart: unless-stopped
     volumes:
       - ./.cache:/app/.cache
+      # 开发挂载：源码热更新（改代码后 docker compose restart audio 生效）
+      - ../bookroom_audio:/app/bookroom_audio
     environment:
       TZ: ${TZ:-Asia/Shanghai}
       API_KEY: ${API_KEY:-your_api_key_here}
