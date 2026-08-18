@@ -640,9 +640,13 @@ def _get_cosyvoice_model():
 
                     from cosyvoice.cli.cosyvoice import CosyVoice2
 
-                    # 设备：config.model.device（默认 cpu）；GPU 时 fp16 加速
+                    # 设备：config.model.device（默认 auto）；真实设备由 CosyVoice 自行解析（cuda/cpu）
                     device = config.model.device
-                    use_fp16 = device != "cpu" or os.getenv("COSYVOICE_FP16", "0") == "1"
+                    # fp16 仅在真实 CUDA 设备上启用。
+                    # 注意：旧判断 `device != "cpu"` 在 DEVICE=auto（非 "cpu" 字符串）且机器无 GPU 时会误开 fp16，
+                    # 导致模型以 half 权重在 CPU 上推理——极慢（rtf 10+）且易触发数值异常。
+                    import torch as _torch
+                    use_fp16 = _torch.cuda.is_available() and (device != "cpu" or os.getenv("COSYVOICE_FP16", "0") == "1")
                     logger.info(f"CosyVoice2 loading from {model_dir} (device={device}, fp16={use_fp16})...")
                     _cosyvoice_model = CosyVoice2(
                         model_dir,
@@ -733,6 +737,329 @@ def generate_audio_cosyvoice(
         data=wav_int16.tobytes(),
         sample_width=2,
         frame_rate=getattr(model, "sample_rate", 24000),
+        channels=1,
+    )
+    audio = audio.set_frame_rate(target_sample_rate)
+
+    out_buf = io.BytesIO()
+    audio.export(out_buf, format="wav")
+    return out_buf.getvalue()
+
+
+# ================================================================
+# CosyVoice 3（Fun-CosyVoice3-0.5B-2512，Apache 2.0 可商用）
+# 注意：CosyVoice3 模型包不含 spk2info.pt（无预置音色），官方仅支持
+# zero_shot / cross_lingual 音色克隆 —— 必须提供参考音频（reference_audio）。
+# 缺少参考音频时显式报错，绝不静默回退到其它引擎/模型（避免产出错误语音）。
+# 引擎名：cosyvoice3。不参与 auto 自动选择（auto 无法提供参考音频）。
+# ================================================================
+_cosyvoice3_model = None
+_cosyvoice3_lock = threading.Lock()
+_COSYVOICE3_DEFAULT_PROMPT = "You are a helpful assistant.<|endofprompt|>"
+
+
+def _cosyvoice3_model_dir() -> str:
+    """CosyVoice3 模型目录（环境变量 COSYVOICE3_MODEL_DIR 可覆盖）"""
+    env_dir = os.getenv("COSYVOICE3_MODEL_DIR")
+    if env_dir:
+        return env_dir
+    from bookroom_audio.utils.config import get_config
+    config = get_config()
+    return os.path.join(config.cache.cache_dir, "cosyvoice-ms", "FunAudioLLM", "Fun-CosyVoice3-0___5B-2512")
+
+
+def _check_cosyvoice3_available() -> bool:
+    """检查 CosyVoice3 是否可用（模型目录 + cosyvoice3.yaml + cosyvoice 可导入）"""
+    model_dir = _cosyvoice3_model_dir()
+    if not os.path.isdir(model_dir) or not os.path.exists(os.path.join(model_dir, "cosyvoice3.yaml")):
+        return False
+    try:
+        import sys
+        from bookroom_audio.utils.config import get_config
+        config = get_config()
+        repo_root = os.getenv("COSYVOICE_ROOT", os.path.join(config.cache.cache_dir, "CosyVoice"))
+        if os.path.isdir(repo_root) and repo_root not in sys.path:
+            sys.path.append(repo_root)
+        import cosyvoice  # noqa: F401
+        return True
+    except ImportError:
+        return False
+
+
+def _get_cosyvoice3_model():
+    """获取或加载 CosyVoice3 模型（线程安全懒加载）"""
+    global _cosyvoice3_model
+    if _cosyvoice3_model is None:
+        with _cosyvoice3_lock:
+            if _cosyvoice3_model is None:
+                logger.info("Loading CosyVoice3 model...")
+                try:
+                    import sys
+                    from bookroom_audio.utils.config import get_config
+                    config = get_config()
+                    repo_root = os.getenv("COSYVOICE_ROOT", os.path.join(config.cache.cache_dir, "CosyVoice"))
+                    if os.path.isdir(repo_root) and repo_root not in sys.path:
+                        sys.path.append(repo_root)
+                    matcha_tts = os.path.join(repo_root, "third_party", "Matcha-TTS")
+                    if os.path.isdir(matcha_tts) and matcha_tts not in sys.path:
+                        sys.path.append(matcha_tts)
+
+                    from cosyvoice.cli.cosyvoice import CosyVoice3
+
+                    model_dir = _cosyvoice3_model_dir()
+                    # fp16 仅在真实 CUDA 设备上启用（与 CosyVoice2 保持一致，CPU 上禁用）
+                    import torch as _torch
+                    use_fp16 = _torch.cuda.is_available() and os.getenv("COSYVOICE_FP16", "0") == "1"
+                    logger.info(f"CosyVoice3 loading from {model_dir} (fp16={use_fp16})...")
+                    _cosyvoice3_model = CosyVoice3(model_dir, fp16=use_fp16)
+                    logger.info("CosyVoice3 model loaded successfully!")
+                except Exception as e:
+                    logger.error(f"Error loading CosyVoice3 model: {e}", exc_info=True)
+                    _cosyvoice3_model = None
+    return _cosyvoice3_model
+
+
+def _get_cosyvoice3_status() -> dict:
+    """获取 CosyVoice3 状态信息"""
+    model_dir = _cosyvoice3_model_dir()
+    return {
+        "available": _check_cosyvoice3_available(),
+        "model_loaded": _cosyvoice3_model is not None,
+        "model_dir": model_dir,
+        "model_exists": os.path.isdir(model_dir),
+        "description": "CosyVoice 3 - 阿里通义 Fun-CosyVoice3-0.5B-2512（Apache 2.0 可商用），9 语言 + 18 方言 zero-shot 克隆",
+        "features": [
+            "zero_shot 音色克隆：需提供参考音频（3~10s）",
+            "9 种语言 + 18 种汉语方言",
+            "发音修补 / 指令控制情感语速",
+            "无预置音色（官方仅 zero_shot 模式）",
+        ],
+        "requires_reference_audio": True,
+    }
+
+
+def generate_audio_cosyvoice3(
+    text: str,
+    reference_audio: Optional[str] = None,  # base64 编码的 WAV（说话人音色样本）
+    reference_text: Optional[str] = None,   # 参考音频对应文本（prompt_text，可选）
+    target_sample_rate: int = 16000,
+    emotion: str = "neutral",
+) -> bytes:
+    """
+    使用 CosyVoice 3 生成音频（zero_shot 音色克隆模式）。
+
+    Args:
+        text: 要转换的文本（tts_text）
+        reference_audio: 参考音频（base64 编码 WAV，3~10s 说话人样本），必填
+        reference_text: 参考音频对应文本，可选；默认官方 system prompt。
+            会自动确保含 <|endofprompt|>（CosyVoice3 LLM 硬性要求，缺失会 assert 崩溃）。
+        target_sample_rate: 目标采样率
+        emotion: 保留参数
+
+    Returns:
+        WAV 格式音频数据
+
+    Raises:
+        ValueError: 缺少参考音频 / base64 非法时显式报错（不静默回退）
+        Exception: 模型未加载 / 无输出 / 推理失败（显式报错，不兜底）
+    """
+    import base64
+    import numpy as np
+    import tempfile
+
+    if not reference_audio:
+        raise ValueError(
+            "CosyVoice3 引擎需要参考音频（reference_audio，base64 编码 WAV，3~10s 说话人样本）。"
+            "CosyVoice3 无预置音色，仅支持 zero_shot 音色克隆。"
+        )
+
+    model = _get_cosyvoice3_model()
+    if model is None:
+        raise Exception(
+            "CosyVoice3 model not loaded. 请确认已下载 Fun-CosyVoice3-0.5B-2512 "
+            "（见 MODEL_DOWNLOAD.md / COSYVOICE3_MODEL_DIR 环境变量）"
+        )
+
+    # 参考文本：默认官方 system prompt；用户提供时确保含 <|endofprompt|>
+    prompt_text = reference_text.strip() if reference_text and reference_text.strip() else _COSYVOICE3_DEFAULT_PROMPT
+    if "<|endofprompt|>" not in prompt_text:
+        prompt_text = prompt_text + "<|endofprompt|>"
+
+    # base64 -> 临时 wav
+    try:
+        wav_bytes = base64.b64decode(reference_audio)
+    except Exception as e:
+        raise ValueError(f"reference_audio base64 解码失败: {e}")
+    if len(wav_bytes) == 0:
+        raise ValueError("reference_audio 为空")
+
+    with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
+        f.write(wav_bytes)
+        tmp_wav = f.name
+    try:
+        chunks = []
+        for out in model.inference_zero_shot(tts_text=text, prompt_text=prompt_text, prompt_wav=tmp_wav, stream=False):
+            chunks.append(out["tts_speech"])
+    finally:
+        os.unlink(tmp_wav)
+
+    if not chunks:
+        raise Exception("CosyVoice3 generated no audio chunks")
+
+    import torch
+    wav = torch.cat(chunks, dim=1)
+    wav_np = wav.numpy().squeeze()
+    if wav_np.ndim > 1:
+        wav_np = wav_np.mean(axis=0)
+    wav_int16 = (np.clip(wav_np, -1.0, 1.0) * 32767).astype(np.int16)
+
+    audio = AudioSegment(
+        data=wav_int16.tobytes(),
+        sample_width=2,
+        frame_rate=getattr(model, "sample_rate", 24000),
+        channels=1,
+    )
+    audio = audio.set_frame_rate(target_sample_rate)
+
+    out_buf = io.BytesIO()
+    audio.export(out_buf, format="wav")
+    return out_buf.getvalue()
+
+
+# ================================================================
+# Kokoro-82M v1.0（hexgrad，Apache 2.0，代码+权重均可商用）
+# text-only 预置音色（54 个，含中文 8 个），82M 极轻量，CPU 可跑。
+# 定位：替代 ChatTTS 的可商用本地 TTS。权重经 HF 镜像预下载到
+# KOKORO_HF_HOME（.cache/kokoro-hf，HF 缓存结构），加载时临时接管 HF_HOME/
+# HF_ENDPOINT（项目 HF_ENDPOINT 指向 modelscope，会破坏 kokoro 的 HF 下载）。
+# 引擎名：kokoro。失败显式报错，绝不静默兜底到其它引擎。
+# ================================================================
+_kokoro_pipelines: dict = {}   # lang_code -> KPipeline
+_kokoro_lock = threading.Lock()
+
+
+def _kokoro_hf_home() -> str:
+    """Kokoro 权重 HF 缓存目录（默认 .cache/kokoro-hf，随 .cache 卷同步）"""
+    env_dir = os.getenv("KOKORO_HF_HOME")
+    if env_dir:
+        return env_dir
+    from bookroom_audio.utils.config import get_config
+    config = get_config()
+    return os.path.join(config.cache.cache_dir, "kokoro-hf")
+
+
+def _check_kokoro_available() -> bool:
+    """检查 Kokoro 是否可用（kokoro 包可导入即可；权重首次运行时自动下载）"""
+    try:
+        import kokoro  # noqa: F401
+        return True
+    except ImportError:
+        return False
+
+
+def _kokoro_repo_id(lang_code: str) -> str:
+    """按语言选择 Kokoro 权重仓库：中文用 v1.1-zh 优化版（hexgrad/Kokoro-82M-v1.1-zh），
+    其余语言用 v1.0 标准版（hexgrad/Kokoro-82M）。"""
+    if lang_code == "z":
+        return os.getenv("KOKORO_REPO_ID_ZH", "hexgrad/Kokoro-82M-v1.1-zh")
+    return os.getenv("KOKORO_REPO_ID", "hexgrad/Kokoro-82M")
+
+
+def _get_kokoro_pipeline(lang_code: str):
+    """获取/加载指定语言的 Kokoro pipeline（线程安全懒加载；临时接管 HF 环境变量）"""
+    if lang_code not in _kokoro_pipelines:
+        with _kokoro_lock:
+            if lang_code not in _kokoro_pipelines:
+                logger.info(f"Loading Kokoro pipeline (lang={lang_code}, repo={_kokoro_repo_id(lang_code)})...")
+                # kokoro 权重走 HF 下载；项目 HF_ENDPOINT 指向 modelscope 会破坏下载，
+                # 此处临时接管，加载完成后恢复。
+                saved = {k: os.environ.get(k) for k in ("HF_ENDPOINT", "HF_HOME")}
+                os.environ["HF_ENDPOINT"] = os.getenv("KOKORO_HF_ENDPOINT", "https://hf-mirror.com")
+                os.environ["HF_HOME"] = _kokoro_hf_home()
+                try:
+                    from kokoro import KPipeline
+                    _kokoro_pipelines[lang_code] = KPipeline(
+                        lang_code=lang_code,
+                        repo_id=_kokoro_repo_id(lang_code),
+                    )
+                    logger.info(f"Kokoro pipeline loaded (lang={lang_code})")
+                finally:
+                    for k, v in saved.items():
+                        if v is None:
+                            os.environ.pop(k, None)
+                        else:
+                            os.environ[k] = v
+    return _kokoro_pipelines[lang_code]
+
+
+def _kokoro_status() -> dict:
+    """获取 Kokoro 状态信息"""
+    return {
+        "available": _check_kokoro_available(),
+        "model_loaded": len(_kokoro_pipelines) > 0,
+        "weights_home": _kokoro_hf_home(),
+        "description": "Kokoro-82M - hexgrad 开源 TTS（Apache 2.0 可商用），82M 极轻量；中文用 v1.1-zh 优化版",
+        "features": [
+            "text-only 预置音色（无需参考音频）",
+            "Apache 2.0 可商用（代码+权重）",
+            "极轻量：CPU 可跑（约 6 倍实时）",
+            "中文 v1.1-zh 优化版 + 英/日/西/法/印/意/葡",
+        ],
+    }
+
+
+def _kokoro_lang_from_voice(voice: str) -> str:
+    """从音色名推断语言代码：zf_xiaobei → 'z'（中文）、af_bella → 'a'（美英）等。
+    音色命名规范 {lang}{gender}_{name}，首字符即 LANG_CODES 的 key。"""
+    v = (voice or "").strip().split(",")[0]
+    return v[0] if len(v) >= 2 else "z"
+
+
+def generate_audio_kokoro(
+    text: str,
+    voice: Optional[str] = None,
+    target_sample_rate: int = 16000,
+    emotion: str = "neutral",
+) -> bytes:
+    """
+    使用 Kokoro 生成音频（text-only 预置音色，Apache 2.0 可商用）。
+
+    Args:
+        text: 要转换的文本
+        voice: 预置音色名。中文（v1.1-zh）用 zf_001~zf_099（女）/ zm_009~zm_100（男），
+               如 'zf_001'；英文用 af_maple 等。支持逗号分隔多音色平均。
+               默认中文女声 zf_001。
+        target_sample_rate: 目标采样率
+        emotion: 保留参数
+
+    Returns:
+        WAV 格式音频数据
+
+    Raises:
+        Exception: 模型未加载 / 无输出 / 音色不存在（显式报错，不兜底）
+    """
+    import numpy as np
+
+    voice = (voice or "zf_001").strip()
+    lang_code = _kokoro_lang_from_voice(voice)
+
+    pipeline = _get_kokoro_pipeline(lang_code)  # 失败向上抛（路由层转 500）
+
+    chunks = []
+    sample_rate = 24000
+    for result in pipeline(text, voice=voice, speed=1.0):
+        chunks.append(result.audio)
+
+    if not chunks:
+        raise Exception("Kokoro generated no audio chunks")
+
+    wav_np = np.concatenate(chunks)
+    wav_int16 = (np.clip(wav_np, -1.0, 1.0) * 32767).astype(np.int16)
+
+    audio = AudioSegment(
+        data=wav_int16.tobytes(),
+        sample_width=2,
+        frame_rate=sample_rate,
         channels=1,
     )
     audio = audio.set_frame_rate(target_sample_rate)

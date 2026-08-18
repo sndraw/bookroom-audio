@@ -70,7 +70,75 @@ curl -X POST http://127.0.0.1:25231/v1/tts/generate \
   -d '{"text":"你好，欢迎光临","engine":"cosyvoice","voice":"中文女","sample_rate":16000}'
 ```
 
-> `engine=auto` 时中文文本将**自动优先使用 cosyvoice**（未安装则回退 chattts）。
+> `engine=auto` 时中文文本将**自动优先使用 cosyvoice**（未安装则依次回退 kokoro → chattts）。
+
+## CosyVoice 3 模型下载（Fun-CosyVoice3-0.5B-2512，Apache 2.0，可商用）
+
+> **高质量 zero-shot 克隆引擎**：9 种语言 + 18 种汉语方言、发音修补、指令控制情感语速。
+> **注意**：CosyVoice3 模型包**无预置音色**（不含 spk2info.pt），仅支持 zero_shot/cross_lingual 音色克隆，
+> 请求时必须携带参考音频（`reference_audio`，base64 WAV，3~10s 说话人样本），缺参时接口显式报错，不会回退其它引擎。
+
+### 1. 下载模型权重（约 5GB，ModelScope 推荐）
+
+```bash
+python -c "from modelscope import snapshot_download; snapshot_download('FunAudioLLM/Fun-CosyVoice3-0.5B-2512', local_dir='./docker-deploy/.cache/cosyvoice-ms/FunAudioLLM/Fun-CosyVoice3-0___5B-2512')"
+```
+
+### 2. 配置
+
+| 环境变量 | 默认值 | 说明 |
+|---|---|---|
+| `COSYVOICE3_MODEL_DIR` | `<cache>/cosyvoice-ms/FunAudioLLM/Fun-CosyVoice3-0___5B-2512` | CosyVoice3 模型目录 |
+
+### 3. 使用（zero_shot，需参考音频）
+
+```bash
+# reference_audio 为 base64 编码的 WAV（3~10s 说话人样本）；reference_text 可选（参考音频文本，自动补 <|endofprompt|>）
+curl -X POST http://127.0.0.1:25231/v1/tts/generate \
+  -H 'Content-Type: application/json' \
+  -d '{"text":"你好，欢迎光临","engine":"cosyvoice3","reference_audio":"<base64 WAV>","reference_text":"可选"}'
+```
+
+## Kokoro-82M 模型下载（Apache 2.0，可商用，极轻量）
+
+> **ChatTTS 的可商用替代**：text-only 预置音色（无需参考音频），82M 极轻量（CPU 可跑，约 6 倍实时）。
+> 中文自动使用 **v1.1-zh 中文优化版**（100 个中文音色：zf_001~zf_099 女 / zm_009~zm_100 男，数字编号）；
+> 英文及其它语言使用 v1.0 标准版（54 音色）。
+
+### 1. 安装
+
+```bash
+pip install kokoro>=0.9.0   # pyproject.toml 已声明；依赖 misaki（英文需系统 espeak-ng，Dockerfile 已装）
+```
+
+### 2. 下载权重（v1.0 + v1.1-zh 各 ~312MB，HF 镜像）
+
+权重经 HuggingFace 下载，首次运行时自动拉取（走 `KOKORO_HF_ENDPOINT` 镜像，默认 hf-mirror.com）：
+
+```bash
+# 预下载到 .cache/kokoro-hf（HF 缓存结构，随 .cache 卷同步，可离线）：
+HF_ENDPOINT=https://hf-mirror.com HF_HOME=./docker-deploy/.cache/kokoro-hf \
+  python -c "from huggingface_hub import hf_hub_download; hf_hub_download('hexgrad/Kokoro-82M-v1.1-zh', 'kokoro-v1_1-zh.pth'); hf_hub_download('hexgrad/Kokoro-82M', 'kokoro-v1_0.pth')"
+```
+
+### 3. 配置
+
+| 环境变量 | 默认值 | 说明 |
+|---|---|---|
+| `KOKORO_HF_HOME` | `<cache>/kokoro-hf` | 权重 HF 缓存目录 |
+| `KOKORO_HF_ENDPOINT` | `https://hf-mirror.com` | 权重下载镜像 |
+| `KOKORO_REPO_ID_ZH` | `hexgrad/Kokoro-82M-v1.1-zh` | 中文权重仓库（一般无需改） |
+
+### 4. 使用
+
+```bash
+# engine=kokoro；voice 可选 zf_001~zf_099 / zm_009~zm_100（中文）/ af_maple（英文女）/ af_sol（英文女）/ bf_vale（英式女）
+curl -X POST http://127.0.0.1:25231/v1/tts/generate \
+  -H 'Content-Type: application/json' \
+  -d '{"text":"你好，欢迎光临","engine":"kokoro","voice":"zf_001","sample_rate":16000}'
+```
+
+> `engine=auto` 中文回退链：**cosyvoice → kokoro → chattts**（前两者均 Apache 2.0 可商用，chattts 仅作最终兜底）。
 
 ## ChatTTS 模型下载
 

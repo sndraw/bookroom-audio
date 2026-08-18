@@ -316,7 +316,9 @@ def create_openai_routes(args: Any, api_key: Optional[str] = None):
             音频流
         """
         try:
-            from bookroom_audio.api.routers.tts.engines import generate_audio
+            # 修复：原代码 import 的 generate_audio 在 engines.py 中不存在，导致该端点恒 500。
+            # 意图是 ChatTTS 合成，直接调用 generate_audio_chatt（失败仍显式报错，无兜底）。
+            from bookroom_audio.api.routers.tts.engines import generate_audio_chatt
 
             # 映射语音名称到本地语音
             voice_map = {
@@ -329,13 +331,13 @@ def create_openai_routes(args: Any, api_key: Optional[str] = None):
             }
             local_voice = voice_map.get(voice, "2")
 
-            # 调用现有TTS逻辑
-            audio_data = await generate_audio(
+            # 调用现有TTS逻辑（generate_audio_chatt 为同步函数，放线程池执行）
+            audio_data = await asyncio.to_thread(
+                generate_audio_chatt,
                 text=input,
                 voice=local_voice,
-                rate=int(speed * 200),
-                engine="chattts",
-                sample_rate=24000,
+                emotion="neutral",
+                target_sample_rate=24000,
             )
 
             # 设置正确的 MIME 类型

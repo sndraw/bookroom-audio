@@ -176,16 +176,26 @@ def select_engine(engine: str, text: str) -> str:
         实际使用的引擎名称
     """
     if engine != "auto":
+        # 显式指定的引擎（含 cosyvoice3）原样返回。
+        # 注意：cosyvoice3 需要参考音频（zero_shot），缺参时由路由层显式 400 报错，绝不兜底到其它引擎。
         return engine
     
     lang = detect_language(text)
     if lang == "zh":
-        # 2026-08-18 决策：优先 CosyVoice 2（本地离线、Apache 2.0 可商用）；
-        # 未安装时回退 ChatTTS（本地离线但不可商用，仅内部体验）
+        # 2026-08-18 决策：中文优先 CosyVoice 2（本地离线、Apache 2.0 可商用）；
+        # 其次 Kokoro-82M（Apache 2.0 可商用，text-only 预置音色，替代不可商用的 ChatTTS）；
+        # ChatTTS 仅作最终兜底（本地离线但不可商用，仅内部体验）。
+        # cosyvoice3 不参与 auto 选择：它需要参考音频，auto 无法提供。
         try:
             from bookroom_audio.api.routers.tts.engines import _check_cosyvoice_available
             if _check_cosyvoice_available():
                 return "cosyvoice"
+        except ImportError:
+            pass
+        try:
+            from bookroom_audio.api.routers.tts.engines import _check_kokoro_available
+            if _check_kokoro_available():
+                return "kokoro"
         except ImportError:
             pass
         return "chattts"

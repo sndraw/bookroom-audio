@@ -40,6 +40,15 @@ services:
       COSYVOICE_ROOT: ${COSYVOICE_ROOT:-/app/.cache/CosyVoice}
       COSYVOICE_FP16: ${COSYVOICE_FP16:-0}
 
+      # CosyVoice 3 配置（Fun-CosyVoice3-0.5B-2512；引擎 cosyvoice3，zero_shot 音色克隆需携带参考音频，
+      # 无预置音色；模型包 ~5GB，未下载时该引擎不可用并显式报错，不会回退到其它引擎）
+      COSYVOICE3_MODEL_DIR: ${COSYVOICE3_MODEL_DIR:-/app/.cache/cosyvoice-ms/FunAudioLLM/Fun-CosyVoice3-0___5B-2512}
+
+      # Kokoro-82M 配置（Apache 2.0 可商用 TTS，text-only 预置音色，替代不可商用的 ChatTTS）
+      # 权重 HF 缓存目录（.cache/kokoro-hf 随卷挂载；未下载时经 KOKORO_HF_ENDPOINT 镜像自动下载）
+      KOKORO_HF_HOME: ${KOKORO_HF_HOME:-/app/.cache/kokoro-hf}
+      KOKORO_HF_ENDPOINT: ${KOKORO_HF_ENDPOINT:-https://hf-mirror.com}
+
       # ASR 配置
       ASR_ENGINE: ${ASR_ENGINE:-qwen-asr}
       ASR_MODEL: ${ASR_MODEL:-medium}
@@ -82,6 +91,14 @@ services:
         reservations:
           memory: 4G
           cpus: '2.0'
+          # GPU 加速（NVIDIA Container Toolkit）：
+          # - 宿主机需已安装 nvidia-container-toolkit 且 docker 使用 nvidia runtime
+          # - count: all 使用全部 GPU；可改为具体数量（如 count: 1）
+          # - 启用后 rtf 从 10~25（CPU）降至 ~0.1，CosyVoice 方可实际可用
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
     healthcheck:
       # 容器内未安装 curl/wget，使用 python urllib 做健康检查（python 必然存在）
       test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://localhost:${PORT:-15231}/health')"]

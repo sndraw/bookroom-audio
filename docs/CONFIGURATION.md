@@ -20,6 +20,16 @@ API_KEY=test_api_key
 TTS_ENGINE=chattts
 TTS_LANGUAGE=zh
 
+# CosyVoice 2 / 3（Apache 2.0 可商用）
+COSYVOICE_MODEL_DIR=/app/.cache/cosyvoice-ms/iic/CosyVoice2-0___5B
+COSYVOICE_ROOT=/app/.cache/CosyVoice
+COSYVOICE_FP16=0
+COSYVOICE3_MODEL_DIR=/app/.cache/cosyvoice-ms/FunAudioLLM/Fun-CosyVoice3-0___5B-2512
+
+# Kokoro-82M（Apache 2.0 可商用，text-only 预置音色，替代 ChatTTS）
+KOKORO_HF_HOME=/app/.cache/kokoro-hf
+KOKORO_HF_ENDPOINT=https://hf-mirror.com
+
 # ASR 配置
 ASR_ENGINE=qwen-asr
 ASR_MODEL=medium
@@ -130,8 +140,14 @@ python -m bookroom_audio.server \
 | `asr_model` | str | `"medium"` | ASR模型大小 |
 | `asr_language` | str | `"zh"` | ASR默认语言 |
 | **TTS 配置** | | | |
-| `tts_engine` | str | `"chattts"` | TTS引擎 (chattts, melotts) |
+| `tts_engine` | str | `"chattts"` | TTS引擎（服务级默认；实际由请求 `engine` 参数决定，可选 auto/chattts/cosyvoice/cosyvoice3/kokoro/edge-tts/pyttsx3） |
 | `tts_language` | str | `"zh"` | TTS默认语言 |
+| `COSYVOICE_MODEL_DIR` | str | `<cache>/cosyvoice-ms/iic/CosyVoice2-0___5B` | CosyVoice 2 模型目录（Apache 2.0 可商用） |
+| `COSYVOICE_ROOT` | str | `<cache>/CosyVoice` | CosyVoice 仓库根 |
+| `COSYVOICE_FP16` | str | `"0"` | GPU 时设 `1` 启用 FP16（CPU 自动禁用） |
+| `COSYVOICE3_MODEL_DIR` | str | `<cache>/cosyvoice-ms/FunAudioLLM/Fun-CosyVoice3-0___5B-2512` | CosyVoice 3 模型目录（zero_shot 需参考音频） |
+| `KOKORO_HF_HOME` | str | `<cache>/kokoro-hf` | Kokoro 权重 HF 缓存目录（Apache 2.0 可商用） |
+| `KOKORO_HF_ENDPOINT` | str | `https://hf-mirror.com` | Kokoro 权重下载镜像 |
 | **流式 ASR 配置** | | | |
 | `streaming_asr_engine` | str | `"funasr-local"` | 流式ASR引擎 (funasr-server, funasr-local, sensevoice-local) |
 | `streaming_asr_model` | str | `"paraformer-zh-streaming"` | FunASR 流式模型（PARTIAL 阶段） |

@@ -53,10 +53,14 @@ const response = await fetch('http://localhost:15231/v1/tts/generate', {
 ## 🎯 主要功能
 
 ### 🔊 语音合成 (TTS)
-- **ChatTTS** - 支持中文语音合成，支持多种情感和音色
+- **CosyVoice 2 / 3** - 阿里 FunAudioLLM（Apache 2.0 可商用），中文韵律开源第一梯队；CosyVoice3 支持 zero_shot 音色克隆（需参考音频）
+- **Kokoro-82M** - hexgrad（Apache 2.0 可商用），text-only 预置音色，82M 极轻量 CPU 可跑，中文 v1.1-zh 优化版
+- **ChatTTS** - 支持中文语音合成，支持多种情感和音色（**不可商用**，仅作 auto 模式最终兜底）
 - **MeloTTS** - 支持中文、英文、日文等多种语言
+- **Edge TTS** - 微软在线 TTS（需网络）
 - 支持语音和情感选择
 - 输出WAV格式音频
+- 全部引擎均可商用（除 ChatTTS）：CosyVoice 2/3 + Kokoro 均为 Apache 2.0
 
 ### 🎤 语音识别 (ASR)
 - **Qwen3-ASR** - 阿里达摩院语音识别模型
@@ -149,9 +153,21 @@ GET /v1/audio/streaming/engines
 
 ### 默认配置
 ```bash
-# TTS 配置
+# TTS 配置（引擎由请求参数 engine 决定，默认 auto：中文 cosyvoice → kokoro → chattts，英文 pyttsx3）
 TTS_ENGINE=chattts
 TTS_LANGUAGE=zh
+
+# CosyVoice 2（Apache 2.0 可商用）
+COSYVOICE_MODEL_DIR=/app/.cache/cosyvoice-ms/iic/CosyVoice2-0___5B
+COSYVOICE_ROOT=/app/.cache/CosyVoice
+COSYVOICE_FP16=0
+
+# CosyVoice 3（Apache 2.0 可商用，zero_shot 需参考音频；模型 ~5GB 需下载）
+COSYVOICE3_MODEL_DIR=/app/.cache/cosyvoice-ms/FunAudioLLM/Fun-CosyVoice3-0___5B-2512
+
+# Kokoro-82M（Apache 2.0 可商用；权重首次运行自动经 hf-mirror 下载 ~630MB）
+KOKORO_HF_HOME=/app/.cache/kokoro-hf
+KOKORO_HF_ENDPOINT=https://hf-mirror.com
 
 # ASR 配置  
 ASR_ENGINE=qwen-asr
@@ -205,6 +221,12 @@ export HF_ENDPOINT=https://www.modelscope.cn
 # 下载 ChatTTS 模型（推荐）
 huggingface-cli download 2Noise/ChatTTS
 
+# 下载 CosyVoice 2 模型（Apache 2.0 可商用；详见 MODEL_DOWNLOAD.md）
+python -c "from modelscope import snapshot_download; snapshot_download('iic/CosyVoice2-0.5B', local_dir='./docker-deploy/.cache/cosyvoice-ms/iic/CosyVoice2-0___5B')"
+
+# 下载 CosyVoice 3 模型（Apache 2.0 可商用，~5GB，zero_shot 需参考音频）
+python -c "from modelscope import snapshot_download; snapshot_download('FunAudioLLM/Fun-CosyVoice3-0.5B-2512', local_dir='./docker-deploy/.cache/cosyvoice-ms/FunAudioLLM/Fun-CosyVoice3-0___5B-2512')"
+
 # 下载 Qwen3-ASR 模型
 huggingface-cli download Qwen/Qwen3-ASR-1.7B
 
@@ -218,10 +240,14 @@ HF_ENDPOINT=https://www.modelscope.cn huggingface-cli download openai/whisper-me
 huggingface-cli download myshell-ai/MeloTTS-Chinese
 ```
 
+> 💡 **Kokoro-82M**（Apache 2.0 可商用）无需手动下载：首次调用 `engine=kokoro` 时自动经 `KOKORO_HF_ENDPOINT`（默认 hf-mirror.com）下载权重（v1.0 + v1.1-zh 各 ~312MB）到 `KOKORO_HF_HOME`。
+
 ### **ModelScope 模型地址汇总**
 | 模型 | ModelScope 地址 | 说明 |
 |------|----------------|------|
-| ChatTTS | https://www.modelscope.cn/models/2Noise/ChatTTS | 高质量中文语音合成 |
+| ChatTTS | https://www.modelscope.cn/models/2Noise/ChatTTS | 高质量中文语音合成（不可商用） |
+| CosyVoice2-0.5B | https://www.modelscope.cn/models/iic/CosyVoice2-0.5B | CosyVoice 2（Apache 2.0 可商用） |
+| Fun-CosyVoice3-0.5B-2512 | https://www.modelscope.cn/models/FunAudioLLM/Fun-CosyVoice3-0.5B-2512 | CosyVoice 3（Apache 2.0 可商用，~5GB） |
 | Qwen3-ASR-1.7B | https://www.modelscope.cn/models/Qwen/Qwen3-ASR-1.7B | 阿里语音识别模型 |
 | whisper-medium | https://www.modelscope.cn/models/openai/whisper-medium | OpenAI 官方 Whisper（推荐） |
 | MeloTTS-Chinese | https://www.modelscope.cn/models/myshell-ai/MeloTTS-Chinese | 多语言语音合成 |

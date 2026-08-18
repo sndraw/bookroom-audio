@@ -32,9 +32,15 @@ from bookroom_audio.api.routers.tts.engines import (
     _check_cosyvoice_available,
     _get_cosyvoice_status,
     _get_cosyvoice_model,
+    _check_cosyvoice3_available,
+    _get_cosyvoice3_status,
+    _check_kokoro_available,
+    _kokoro_status,
     generate_audio_chatt,
     generate_audio_cosyvoice,
+    generate_audio_cosyvoice3,
     generate_audio_edge_tts,
+    generate_audio_kokoro,
     generate_audio_pyttsx3,
     stream_tts_edge_with_words,
     EDGE_TTS_AVAILABLE,
@@ -121,6 +127,23 @@ def create_tts_routes(args: Any, api_key: Optional[str] = None):
                     voice=voice,
                     target_sample_rate=request.sample_rate,
                 )
+            elif selected_engine == "cosyvoice3":
+                # CosyVoice3 仅 zero_shot 模式（无预置音色），必须携带参考音频。
+                # 缺少参考音频 → generate_audio_cosyvoice3 抛 ValueError → 400 显式报错，
+                # 绝不静默回退到其它引擎/模型（避免产出错误语音）。
+                if not _check_cosyvoice3_available():
+                    raise HTTPException(
+                        status_code=500,
+                        detail="CosyVoice3 not available. 请确认已下载 Fun-CosyVoice3-0.5B-2512 并配置 COSYVOICE3_MODEL_DIR",
+                    )
+
+                audio_data = await asyncio.to_thread(
+                    generate_audio_cosyvoice3,
+                    text=request.text,
+                    reference_audio=request.reference_audio,
+                    reference_text=request.reference_text,
+                    target_sample_rate=request.sample_rate,
+                )
             elif selected_engine == "pyttsx3":
                 if not PYTTSX3_AVAILABLE:
                     raise HTTPException(status_code=500, detail="pyttsx3 not available")
@@ -135,6 +158,20 @@ def create_tts_routes(args: Any, api_key: Optional[str] = None):
                     voice_id=voice_id,
                     rate=rate,
                     volume=volume,
+                    target_sample_rate=request.sample_rate,
+                )
+            elif selected_engine == "kokoro":
+                # Kokoro-82M（Apache 2.0 可商用）：text-only 预置音色，替代 ChatTTS。
+                # 失败显式报错（500），绝不静默回退到其它引擎。
+                if not _check_kokoro_available():
+                    raise HTTPException(status_code=500, detail="Kokoro not available. 请安装：pip install kokoro")
+
+                voice = request.voice or request.voice_id or "zf_001"
+
+                audio_data = await asyncio.to_thread(
+                    generate_audio_kokoro,
+                    text=request.text,
+                    voice=voice,
                     target_sample_rate=request.sample_rate,
                 )
             else:
@@ -208,6 +245,19 @@ def create_tts_routes(args: Any, api_key: Optional[str] = None):
             }
             result["available_engines"].append("cosyvoice")
 
+        cosyvoice3_status = _get_cosyvoice3_status()
+        if cosyvoice3_status["available"]:
+            result["cosyvoice3"] = {
+                "voices": [],  # 无预置音色：zero_shot 音色克隆需携带参考音频
+                "description": cosyvoice3_status["description"],
+                "features": cosyvoice3_status["features"],
+                "model_loaded": cosyvoice3_status["model_loaded"],
+                "model_exists": cosyvoice3_status["model_exists"],
+                "model_dir": cosyvoice3_status["model_dir"],
+                "requires_reference_audio": cosyvoice3_status["requires_reference_audio"],
+            }
+            result["available_engines"].append("cosyvoice3")
+
         if PYTTSX3_AVAILABLE:
             result["pyttsx3"] = {
                 "description": "pyttsx3 - 本地离线TTS引擎",
@@ -218,6 +268,18 @@ def create_tts_routes(args: Any, api_key: Optional[str] = None):
                 ],
             }
             result["available_engines"].append("pyttsx3")
+
+        kokoro_status = _kokoro_status()
+        if kokoro_status["available"]:
+            from bookroom_audio.api.routers.tts.constants import KOKORO_VOICES
+            result["kokoro"] = {
+                "voices": KOKORO_VOICES,
+                "description": kokoro_status["description"],
+                "features": kokoro_status["features"],
+                "model_loaded": kokoro_status["model_loaded"],
+                "weights_home": kokoro_status["weights_home"],
+            }
+            result["available_engines"].append("kokoro")
 
         return result
 
