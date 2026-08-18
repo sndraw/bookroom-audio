@@ -180,5 +180,13 @@ def select_engine(engine: str, text: str) -> str:
     
     lang = detect_language(text)
     if lang == "zh":
+        # 2026-08-18 决策：优先 CosyVoice 2（本地离线、Apache 2.0 可商用）；
+        # 未安装时回退 ChatTTS（本地离线但不可商用，仅内部体验）
+        try:
+            from bookroom_audio.api.routers.tts.engines import _check_cosyvoice_available
+            if _check_cosyvoice_available():
+                return "cosyvoice"
+        except ImportError:
+            pass
         return "chattts"
-    return "edge-tts"
+    return "pyttsx3"

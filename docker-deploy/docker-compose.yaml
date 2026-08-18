@@ -35,6 +35,11 @@ services:
       TTS_ENGINE: ${TTS_ENGINE:-chattts}
       TTS_LANGUAGE: ${TTS_LANGUAGE:-zh}
 
+      # CosyVoice 2 配置（本地离线、Apache 2.0 可商用；仓库+模型经 .cache 卷挂载到 /app/.cache）
+      COSYVOICE_MODEL_DIR: ${COSYVOICE_MODEL_DIR:-/app/.cache/cosyvoice-ms/iic/CosyVoice2-0___5B}
+      COSYVOICE_ROOT: ${COSYVOICE_ROOT:-/app/.cache/CosyVoice}
+      COSYVOICE_FP16: ${COSYVOICE_FP16:-0}
+
       # ASR 配置
       ASR_ENGINE: ${ASR_ENGINE:-qwen-asr}
       ASR_MODEL: ${ASR_MODEL:-medium}

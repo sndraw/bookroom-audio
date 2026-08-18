@@ -563,3 +563,180 @@ def generate_audio_chatt(
     audio.export(out_buf, format="wav")
     
     return out_buf.getvalue()
+
+
+# ---------------------------------------------------------------------------
+# CosyVoice 2（阿里 FunAudioLLM，Apache 2.0，本地离线可商用）
+# 模型：CosyVoice2-0.5B（ModelScope: iic/CosyVoice2-0.5B，~1.5GB）
+# 安装：pip install git+https://github.com/FunAudioLLM/CosyVoice.git
+#       需要 third_party/Matcha-TTS 加入 sys.path（代码内处理）
+# 参考：cosyvoice.cli.cosyvoice.CosyVoice2 → inference_sft / inference_zero_shot
+# 输出采样率：24000（模型固定），再重采样到目标采样率
+# ---------------------------------------------------------------------------
+
+# CosyVoice 支持检查（延迟导入，避免启动时加载 torch/依赖）
+COSYVOICE_AVAILABLE = False
+_cosyvoice_model = None
+_cosyvoice_lock = threading.Lock()
+
+
+def _check_cosyvoice_available() -> bool:
+    """检查 CosyVoice 是否可用（延迟检查；cosyvoice 在仓库目录，需先加入 sys.path）"""
+    global COSYVOICE_AVAILABLE
+    if not COSYVOICE_AVAILABLE:
+        try:
+            import sys
+            from bookroom_audio.utils.config import get_config
+            config = get_config()
+            repo_root = os.getenv("COSYVOICE_ROOT", os.path.join(config.cache.cache_dir, "CosyVoice"))
+            if os.path.isdir(repo_root) and repo_root not in sys.path:
+                sys.path.append(repo_root)
+            import cosyvoice  # noqa: F401
+            COSYVOICE_AVAILABLE = True
+        except ImportError:
+            COSYVOICE_AVAILABLE = False
+    return COSYVOICE_AVAILABLE
+
+
+def _cosyvoice_model_dir() -> str:
+    """CosyVoice2-0.5B 模型目录（环境变量可覆盖，默认在 CosyVoice 仓库 pretrained_models 下）"""
+    from bookroom_audio.utils.config import get_config
+    config = get_config()
+    env_dir = os.getenv("COSYVOICE_MODEL_DIR")
+    if env_dir:
+        return env_dir
+    # 优先仓库内 pretrained_models/CosyVoice2-0.5B
+    repo_root = os.getenv("COSYVOICE_ROOT", os.path.join(config.cache.cache_dir, "CosyVoice"))
+    return os.path.join(repo_root, "pretrained_models", "CosyVoice2-0.5B")
+
+
+def _get_cosyvoice_model():
+    """获取或加载 CosyVoice2 模型（线程安全懒加载）"""
+    global _cosyvoice_model
+    if _cosyvoice_model is None:
+        with _cosyvoice_lock:
+            if _cosyvoice_model is None:
+                logger.info("Loading CosyVoice2 model...")
+                try:
+                    import sys
+                    from bookroom_audio.utils.config import get_config
+                    config = get_config()
+
+                    model_dir = _cosyvoice_model_dir()
+                    if not os.path.isdir(model_dir):
+                        raise FileNotFoundError(
+                            f"CosyVoice2 model not found: {model_dir}. "
+                            f"请先下载：git clone https://www.modelscope.cn/iic/CosyVoice2-0.5B.git "
+                            f"{model_dir} （约 1.5GB）"
+                        )
+
+                    # CosyVoice 无 setup.py，需把仓库根 + third_party/Matcha-TTS 加入 sys.path
+                    repo_root = os.getenv("COSYVOICE_ROOT", os.path.join(config.cache.cache_dir, "CosyVoice"))
+                    if os.path.isdir(repo_root) and repo_root not in sys.path:
+                        sys.path.append(repo_root)
+                    matcha_tts = os.path.join(repo_root, "third_party", "Matcha-TTS")
+                    if os.path.isdir(matcha_tts) and matcha_tts not in sys.path:
+                        sys.path.append(matcha_tts)
+
+                    from cosyvoice.cli.cosyvoice import CosyVoice2
+
+                    # 设备：config.model.device（默认 cpu）；GPU 时 fp16 加速
+                    device = config.model.device
+                    use_fp16 = device != "cpu" or os.getenv("COSYVOICE_FP16", "0") == "1"
+                    logger.info(f"CosyVoice2 loading from {model_dir} (device={device}, fp16={use_fp16})...")
+                    _cosyvoice_model = CosyVoice2(
+                        model_dir,
+                        load_jit=False,
+                        load_trt=False,
+                        fp16=use_fp16,
+                    )
+                    logger.info("CosyVoice2 model loaded successfully!")
+                except Exception as e:
+                    logger.error(f"Error loading CosyVoice2 model: {e}", exc_info=True)
+                    _cosyvoice_model = None
+    return _cosyvoice_model
+
+
+def _get_cosyvoice_status() -> dict:
+    """获取 CosyVoice2 状态信息"""
+    model_dir = _cosyvoice_model_dir()
+    return {
+        "available": _check_cosyvoice_available(),
+        "model_loaded": _cosyvoice_model is not None,
+        "model_dir": model_dir,
+        "model_exists": os.path.isdir(model_dir),
+        "description": "CosyVoice 2 - 阿里 FunAudioLLM 开源 TTS（Apache 2.0 可商用），中文韵律开源第一梯队",
+        "features": [
+            "中文/英文/粤语/四川话等预置音色",
+            "3 秒零样本音色克隆（inference_zero_shot）",
+            "流式合成（首包 ~1.5s）",
+            "本地离线运行，Apache 2.0 可商用",
+        ],
+    }
+
+
+def generate_audio_cosyvoice(
+    text: str,
+    voice: Optional[str] = None,
+    target_sample_rate: int = 16000,
+    emotion: str = "neutral",
+) -> bytes:
+    """
+    使用 CosyVoice 2 生成音频（SFT 预置音色模式）。
+    
+    Args:
+        text: 要转换的文本
+        voice: 预置音色名（如 '中文女' / '中文男'，见 COSYVOICE_VOICES）
+        target_sample_rate: 目标采样率
+        emotion: 保留参数（CosyVoice2 支持指令式情感，此处不强制）
+
+    Returns:
+        WAV格式的音频数据
+    """
+    import numpy as np
+    from bookroom_audio.api.routers.tts.constants import COSYVOICE_VOICES
+
+    model = _get_cosyvoice_model()
+    if model is None:
+        raise Exception(
+            "CosyVoice2 model not loaded. 请确认已安装 cosyvoice 包并下载模型 "
+            "（见 MODEL_DOWNLOAD.md / COSYVOICE_MODEL_DIR 环境变量）"
+        )
+
+    # 音色选择：默认中文女声；无效音色回退第一个可用
+    spk_id = voice if voice and voice in COSYVOICE_VOICES else COSYVOICE_VOICES[0]
+    # 若模型另有 spk2info 音色表，尝试按名称匹配，失败回退默认
+    try:
+        spks = model.list_available_spks() if hasattr(model, "list_available_spks") else []
+        if spks and spk_id not in spks:
+            spk_id = spks[0]
+    except Exception:
+        pass
+
+    # SFT 推理（非流式，返回 chunks）
+    chunks = []
+    for out in model.inference_sft(tts_text=text, spk_id=spk_id, stream=False):
+        chunks.append(out["tts_speech"])
+
+    if not chunks:
+        raise Exception("CosyVoice2 generated no audio chunks")
+
+    # 拼接 → float32 [-1,1] → int16 → WAV（模型固定 24000Hz）
+    import torch
+    wav = torch.cat(chunks, dim=1)
+    wav_np = wav.numpy().squeeze()
+    if wav_np.ndim > 1:
+        wav_np = wav_np.mean(axis=0)
+    wav_int16 = (np.clip(wav_np, -1.0, 1.0) * 32767).astype(np.int16)
+
+    audio = AudioSegment(
+        data=wav_int16.tobytes(),
+        sample_width=2,
+        frame_rate=getattr(model, "sample_rate", 24000),
+        channels=1,
+    )
+    audio = audio.set_frame_rate(target_sample_rate)
+
+    out_buf = io.BytesIO()
+    audio.export(out_buf, format="wav")
+    return out_buf.getvalue()

@@ -21,6 +21,7 @@ from bookroom_audio.api.routers.tts.schemas import TTSRequest
 from bookroom_audio.api.routers.tts.constants import (
     CHATTTS_VOICES,
     CHATTTS_EMOTIONS,
+    COSYVOICE_VOICES,
     EDGE_TTS_VOICES,
 )
 from bookroom_audio.api.routers.tts.utils import select_engine
@@ -28,7 +29,11 @@ from bookroom_audio.api.routers.tts.engines import (
     _check_chattss_available,
     _get_chattss_status,
     _get_chattss_model,
+    _check_cosyvoice_available,
+    _get_cosyvoice_status,
+    _get_cosyvoice_model,
     generate_audio_chatt,
+    generate_audio_cosyvoice,
     generate_audio_edge_tts,
     generate_audio_pyttsx3,
     stream_tts_edge_with_words,
@@ -102,6 +107,18 @@ def create_tts_routes(args: Any, api_key: Optional[str] = None):
                     voice=voice,
                     rate=rate,
                     volume=volume,
+                    target_sample_rate=request.sample_rate,
+                )
+            elif selected_engine == "cosyvoice":
+                if not _check_cosyvoice_available():
+                    raise HTTPException(status_code=500, detail="CosyVoice2 not available. 请安装：pip install git+https://github.com/FunAudioLLM/CosyVoice.git")
+
+                voice = request.voice or request.voice_id or "中文女"
+
+                audio_data = await asyncio.to_thread(
+                    generate_audio_cosyvoice,
+                    text=request.text,
+                    voice=voice,
                     target_sample_rate=request.sample_rate,
                 )
             elif selected_engine == "pyttsx3":
@@ -178,6 +195,18 @@ def create_tts_routes(args: Any, api_key: Optional[str] = None):
                 ],
             }
             result["available_engines"].append("edge-tts")
+
+        cosyvoice_status = _get_cosyvoice_status()
+        if cosyvoice_status["available"]:
+            result["cosyvoice"] = {
+                "voices": COSYVOICE_VOICES,
+                "description": cosyvoice_status["description"],
+                "features": cosyvoice_status["features"],
+                "model_loaded": cosyvoice_status["model_loaded"],
+                "model_exists": cosyvoice_status["model_exists"],
+                "model_dir": cosyvoice_status["model_dir"],
+            }
+            result["available_engines"].append("cosyvoice")
 
         if PYTTSX3_AVAILABLE:
             result["pyttsx3"] = {

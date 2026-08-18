@@ -49,6 +49,24 @@ COPY ./docker/entrypoint.sh /entrypoint.sh
 
 RUN chmod +x /entrypoint.sh
 
+# ================================================================
+# CosyVoice 2（Apache 2.0，本地离线可商用 TTS）
+# - 仓库源码经 .cache 卷挂载（宿主机 docker-deploy/.cache/CosyVoice → 容器 /app/.cache/CosyVoice），
+#   运行时靠 sys.path 导入（engines.py 已处理 COSYVOICE_ROOT）
+# - 只追加最小运行依赖，不装官方 requirements.txt（钉死 torch==2.3.1 会破坏现有环境）
+# - Matcha-TTS 从 PyPI 装 wheel（--no-deps 跳过 notebook 等重依赖）
+# ================================================================
+ENV COSYVOICE_ROOT=/app/.cache/CosyVoice
+
+# CosyVoice 2 运行依赖（minimal set，不覆盖已有包版本）
+# 注意：运行时 entrypoint source .venv/bin/activate，依赖必须装进 /app/.venv
+RUN uv pip install --python /app/.venv/bin/python \
+      hyperpyyaml inflect onnxruntime librosa scipy soundfile gdown pyworld \
+      wetext x-transformers matplotlib diffusers conformer hydra-core \
+      omegaconf einops lightning rootutils torchmetrics tqdm wget \
+      pyarrow grpcio grpcio-tools protobuf tensorboard \
+    && uv pip install --python /app/.venv/bin/python --no-deps --index-url https://pypi.org/simple matcha-tts
+
 EXPOSE 15231
 
 ENTRYPOINT [ "/bin/bash","/entrypoint.sh" ]

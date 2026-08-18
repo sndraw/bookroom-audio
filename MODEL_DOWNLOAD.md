@@ -16,6 +16,62 @@ export HF_ENDPOINT=https://www.modelscope.cn
 HF_ENDPOINT=https://www.modelscope.cn
 ```
 
+## CosyVoice 2 模型下载（Apache 2.0，可商用，本地离线）
+
+> **推荐商用 TTS 引擎**：中文韵律开源第一梯队、流式合成、3 秒零样本音色克隆。替代 ChatTTS（不可商用）与 edge-tts（在线依赖）。
+
+### 1. 安装 cosyvoice 包（PyPI 无官方包，需从 git 安装）
+
+```bash
+pip install git+https://github.com/FunAudioLLM/CosyVoice.git
+# 国内加速可用镜像：
+# pip install git+https://gitcode.com/gh_mirrors/cos/CosyVoice.git
+```
+
+> 代码内已自动将 `third_party/Matcha-TTS` 加入 sys.path（如位于 `COSYVOICE_ROOT/third_party/Matcha-TTS`），无需手动处理。
+
+### 2. 下载模型权重（约 1.5GB）
+
+```bash
+# 方式 A：git clone（ModelScope，国内推荐）
+git clone https://www.modelscope.cn/iic/CosyVoice2-0.5B.git ./docker-deploy/.cache/CosyVoice/pretrained_models/CosyVoice2-0.5B
+
+# 方式 B：指定任意目录后配置环境变量
+git clone https://www.modelscope.cn/iic/CosyVoice2-0.5B.git /path/to/CosyVoice2-0.5B
+export COSYVOICE_MODEL_DIR=/path/to/CosyVoice2-0.5B
+```
+
+### 3. 验证下载完整性
+
+```bash
+ls -la ./docker-deploy/.cache/CosyVoice/pretrained_models/CosyVoice2-0.5B/
+```
+
+应包含：`cosyvoice.yaml`、`llm.pt`、`flow.pt`、`hift.pt`、`speech_tokenizer_v2.onnx`、`spk2info.pt`（预置音色表）等。
+
+### 4. 配置
+
+| 环境变量 | 默认值 | 说明 |
+|---|---|---|
+| `COSYVOICE_MODEL_DIR` | `<cache>/CosyVoice/pretrained_models/CosyVoice2-0.5B` | 模型目录 |
+| `COSYVOICE_ROOT` | `<cache>/CosyVoice` | CosyVoice 仓库根（用于定位 Matcha-TTS） |
+| `COSYVOICE_FP16` | `0`（CPU 默认 FP32） | GPU 时设 `1` 启用 FP16 加速（约 6-8GB 显存，4bit 量化 ~4GB） |
+
+> 💡 **实际部署路径**（2026-08-18 已落地）：仓库 clone 到 `docker-deploy/.cache/CosyVoice`，
+> 模型经 ModelScope `snapshot_download('iic/CosyVoice2-0.5B')` 下载到 `docker-deploy/.cache/cosyvoice-ms`。
+> 若模型不在默认路径，设置 `COSYVOICE_MODEL_DIR=<实际模型目录>` 即可（代码会优先读环境变量）。
+
+### 5. 使用
+
+```bash
+# 引擎指定：cosyvoice；voice 可选：中文女/中文男/英文女/英文男/粤语女/四川女 等预置音色
+curl -X POST http://127.0.0.1:25231/v1/tts/generate \
+  -H 'Content-Type: application/json' \
+  -d '{"text":"你好，欢迎光临","engine":"cosyvoice","voice":"中文女","sample_rate":16000}'
+```
+
+> `engine=auto` 时中文文本将**自动优先使用 cosyvoice**（未安装则回退 chattts）。
+
 ## ChatTTS 模型下载
 
 ### ModelScope 模型地址

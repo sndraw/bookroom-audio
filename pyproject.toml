@@ -11,6 +11,10 @@ authors = [
 dependencies = [
     "argparse>=1.4.0",
     "ascii-colors>=0.5.2",
+    # CosyVoice 2（Apache 2.0 可商用，本地离线）需从 git 安装（PyPI 无官方包）：
+    #   pip install git+https://github.com/FunAudioLLM/CosyVoice.git
+    # 并下载模型：git clone https://www.modelscope.cn/iic/CosyVoice2-0.5B.git <COSYVOICE_MODEL_DIR>
+    # 见 MODEL_DOWNLOAD.md §CosyVoice 2 模型下载
     "chattts>=0.0.9",
     "dotenv>=0.9.9",
     "edge-tts>=6.1.9",

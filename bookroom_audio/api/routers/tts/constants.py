@@ -39,3 +39,18 @@ CHATTTS_EMOTIONS = [
     "angry",
     "neutral",
 ]
+
+# CosyVoice 2 预置音色（SFT 模式，需 spk2info.pt 随模型下载）
+# 来自 CosyVoice2-0.5B 官方预置说话人（list_available_spks()）
+COSYVOICE_VOICES = [
+    "中文女",
+    "中文男",
+    "英文女",
+    "英文男",
+    "日语男",
+    "粤语女",
+    "四川女",
+    "武汉女",
+    "河南女",
+    "浙江女",
+]
