@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>bookroom-audio 流式语音识别示例</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    }
+    body {
+      max-width: 720px;
+      margin: 40px auto;
+      padding: 20px;
+      background: #f5f5f5;
+      color: #333;
+    }
+    h1 { font-size: 1.5rem; margin: 0 0 20px 0; }
+    .config {
+      background: white;
+      padding: 16px;
+      border-radius: 8px;
+      margin-bottom: 16px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+    }
+    .config label {
+      display: block;
+      margin-bottom: 4px;
+      font-weight: 500;
+      font-size: 0.875rem;
+    }
+    .config input, .config select {
+      width: 100%;
+      padding: 8px 12px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      margin-bottom: 12px;
+      font-size: 0.875rem;
+    }
+    .controls {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 16px;
+    }
+    button {
+      padding: 10px 20px;
+      border: none;
+      border-radius: 6px;
+      font-size: 0.9rem;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    #btnStart {
+      background: #22c55e;
+      color: white;
+    }
+    #btnStop {
+      background: #ef4444;
+      color: white;
+    }
+    #status {
+      padding: 8px 12px;
+      background: #e0f2fe;
+      border-radius: 4px;
+      font-size: 0.875rem;
+      margin-bottom: 12px;
+    }
+    #partial {
+      background: #fef3c7;
+      padding: 12px;
+      border-radius: 4px;
+      min-height: 40px;
+      margin-bottom: 12px;
+      font-size: 1rem;
+    }
+    #log {
+      background: #1f2937;
+      color: #d1d5db;
+      padding: 16px;
+      border-radius: 6px;
+      height: 300px;
+      overflow-y: auto;
+      font-family: 'Menlo', monospace;
+      font-size: 0.8rem;
+      line-height: 1.5;
+    }
+    .log-entry { margin-bottom: 4px; }
+    .log-partial { color: #fcd34d; }
+    .log-final { color: #86efac; font-weight: bold; }
+    .log-error { color: #fca5a5; }
+    .log-info { color: #93c5fd; }
+  </style>
+</head>
+<body>
+  <h1>bookroom-audio 流式语音识别</h1>
+
+  <div class="config">
+    <label for="url">服务端 WebSocket URL</label>
+    <input id="url" value="ws://127.0.0.1:15231/v1/audio/streaming/transcriptions">
+
+    <label for="apiKey">API Key（可选）</label>
+    <input id="apiKey" placeholder="未配置鉴权可留空">
+
+    <label for="mode">协议模式</label>
+    <select id="mode">
+      <option value="native">native（bookroom-audio 原生协议）</option>
+      <option value="funasr">FunASR 兼容协议</option>
+    </select>
+
+    <label for="engine">ASR 引擎（仅 native 模式）</label>
+    <select id="engine">
+      <option value="funasr-local">funasr-local（流式 Paraformer）</option>
+      <option value="sensevoice-local">sensevoice-local（VAD 模拟流式）</option>
+    </select>
+  </div>
+
+  <div class="controls">
+    <button id="btnStart">开始识别</button>
+    <button id="btnStop" disabled>停止</button>
+  </div>
+
+  <div id="status">状态：idle</div>
+  <div id="partial">（实时结果显示在这里）</div>
+  <div id="log"></div>
+
+  <!-- 使用打包后的 SDK（dist/index.js）或源码 -->
+  <script type="module">
+    // 从源码导入（开发模式）
+    // 实际部署时改为：import { ... } from './dist/index.mjs'
+    import { BookRoomASRClient, MicCapturer, isMicSupported } from '../src/index.ts';
+
+    const btnStart = document.getElementById('btnStart');
+    const btnStop = document.getElementById('btnStop');
+    const urlInput = document.getElementById('url');
+    const apiKeyInput = document.getElementById('apiKey');
+    const modeSelect = document.getElementById('mode');
+    const engineSelect = document.getElementById('engine');
+    const statusEl = document.getElementById('status');
+    const partialEl = document.getElementById('partial');
+    const logEl = document.getElementById('log');
+
+    let client = null;
+    let mic = null;
+
+    function setStatus(text) {
+      statusEl.textContent = `状态：${text}`;
+    }
+
+    function log(text, type = 'info') {
+      const entry = document.createElement('div');
+      entry.className = `log-entry log-${type}`;
+      const time = new Date().toLocaleTimeString();
+      entry.textContent = `[${time}] ${text}`;
+      logEl.appendChild(entry);
+      logEl.scrollTop = logEl.scrollHeight;
+    }
+
+    btnStart.addEventListener('click', async () => {
+      if (!isMicSupported()) {
+        log('当前环境不支持麦克风采集（需要 HTTPS 或 localhost）', 'error');
+        return;
+      }
+
+      btnStart.disabled = true;
+
+      try {
+        const url = urlInput.value;
+        const apiKey = apiKeyInput.value || undefined;
+        const mode = modeSelect.value;
+        const engine = engineSelect.value;
+
+        log(`连接 ${url}（mode=${mode}）`, 'info');
+
+        client = new BookRoomASRClient(
+          {
+            url,
+            apiKey,
+            mode,
+            connectTimeout: 5000,
+            startTimeout: 30000,
+          },
+          {
+            onConnected: () => {
+              setStatus('connected');
+              log('WebSocket 已连接', 'info');
+            },
+            onStarted: (msg) => {
+              setStatus('started');
+              log(`会话已启动：session=${msg.session_id} engine=${msg.engine}`, 'info');
+              // 连接建立后启动麦克风采集
+              startMic();
+            },
+            onPartial: (text, msg) => {
+              partialEl.textContent = text;
+              log(`PARTIAL #${msg.sentence_id}: ${text}`, 'partial');
+            },
+            onFinal: (text, msg) => {
+              log(`FINAL #${msg.sentence_id}: ${text}`, 'final');
+              partialEl.textContent = '';
+            },
+            onError: (err) => {
+              log(`ERROR ${err.code}: ${err.message}`, 'error');
+            },
+            onClosed: (msg) => {
+              setStatus('closed');
+              log(`连接已关闭：${msg.reason}`, 'info');
+              btnStart.disabled = false;
+              btnStop.disabled = true;
+            },
+            onStateChange: (state) => {
+              setStatus(state);
+            },
+          },
+        );
+
+        await client.connect();
+        await client.start({
+          engine: mode === 'native' ? engine : undefined,
+          audio_format: 'pcm',
+          sample_rate: 16000,
+          enable_punctuation: true,
+          enable_vad: true,
+          enable_itn: true,
+        });
+
+        btnStop.disabled = false;
+      } catch (err) {
+        log(`启动失败：${err.message}`, 'error');
+        btnStart.disabled = false;
+      }
+    });
+
+    async function startMic() {
+      try {
+        mic = new MicCapturer(
+          (chunk) => client?.sendAudio(chunk),
+          {
+            sampleRate: 16000,
+            channelCount: 1,
+            frameMs: 100,
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true,
+          },
+        );
+        await mic.start();
+        log('麦克风采集已启动（请开始说话）', 'info');
+      } catch (err) {
+        log(`麦克风启动失败：${err.message}`, 'error');
+      }
+    }
+
+    btnStop.addEventListener('click', async () => {
+      btnStop.disabled = true;
+      if (mic) {
+        mic.stop();
+        mic = null;
+        log('麦克风采集已停止', 'info');
+      }
+      if (client) {
+        try {
+          await client.stop();
+          log('已发送 STOP，等待 FINAL 结果...', 'info');
+        } catch (err) {
+          log(`停止失败：${err.message}`, 'error');
+        }
+      }
+    });
+  </script>
+</body>
+</html>

@@ -51,3 +51,6 @@ gui/
 # unit-test files
 test_*
 tests/
+
+# WorkBuddy project data
+.workbuddy/

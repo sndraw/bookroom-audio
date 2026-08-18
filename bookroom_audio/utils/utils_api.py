@@ -19,6 +19,8 @@ formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(messag
 stream_handler.setFormatter(formatter)
 # 将处理器添加到 logger 中
 logger.addHandler(stream_handler)
+# 设置 logger 级别为 INFO，允许 info 及以上日志输出
+logger.setLevel(logging.INFO)
 
 
 def get_cors_origins():

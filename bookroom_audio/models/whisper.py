@@ -23,33 +23,25 @@ model_last_loaded = None
 
 ModelQueryResponse = Iterable[Segment]
 
-# --- 语言代码标准化函数 ---
+
 def normalize_language_code(language: str | None) -> str | None:
-    """
-    将常见的语言代码转换为 Whisper/faster-whisper 支持的两位代码。
-    例如: 'zh-CN' -> 'zh', 'en-US' -> 'en', 'yue' -> 'yue'
-    """
     if not language:
         return None
     
-    # 转为小写
     lang = language.lower().strip()
     
-    # 如果已经是两位代码，直接返回（假设输入合法）
     if len(lang) == 2:
         return lang
         
-    # 处理带横杠的代码 (如 zh-CN, en-US)
     if '-' in lang:
         lang = lang.split('-')[0]
         
-    # 特殊处理：有些三位代码可能需要映射，但 whisper 主要支持两位。
-    # yue (粤语) 是三位但在 whitelist 中，需保留
     if lang == 'yue':
         return 'yue'
         
-    # 默认取前两位
     return lang[:2]
+
+
 def print_model_loading(args: Any, params: dict):
     ASCIIColors.blue("\nModel is being loaded...\n")
     ASCIIColors.white("    ├─ model_size_or_path: ", end="")
@@ -66,19 +58,20 @@ def print_model_loading(args: Any, params: dict):
     from bookroom_audio.utils.config import get_config
     config = get_config()
     ASCIIColors.yellow(f"{config.cache.cache_dir}")
-    ASCIIColors.white("    ├─ local_files_only: ", end="")
-    ASCIIColors.yellow(f"{config.cache.local_files_only}")
+    ASCIIColors.white("    └─ local_files_only: ", end="")
+    ASCIIColors.yellow("True (强制禁用自动下载)")
     
+
 def print_transcribing_audio(params: dict):
     ASCIIColors.blue("\nTranscribing audio...\n")
     ASCIIColors.white("    ├─ model: ", end="")
     ASCIIColors.yellow(f"{params.get('model_size_or_path')}")
     ASCIIColors.white("    ├─ task: ", end="")
     ASCIIColors.yellow(f"{params.get('task')}")
-    ASCIIColors.white("    ├─ language: ", end="")
+    ASCIIColors.white("    └─ language: ", end="")
     ASCIIColors.yellow(f"{params.get('language')}")
 
-# 异步加载模型，并更新加载/调用时间，便于监控模型加载情况
+
 async def load_model_task(args: Any, params: dict):
     global model_client
     global model_last_loaded
@@ -86,19 +79,19 @@ async def load_model_task(args: Any, params: dict):
     if model_client is None:
         print_model_loading(args, params)
         model_last_loaded = datetime.now()
-        # 加载Whisper模型,可根据实际情况选择模型大小和设备
         try:
-            # 使用统一的配置系统获取缓存参数
             from bookroom_audio.utils.config import get_config
             config = get_config()
             
+            # 强制使用本地文件模式，禁止自动下载
+            # 原因：非官方Whisper模型可能包含广告，必须手动下载官方版本
             model_client = WhisperModel(
                 model_size_or_path=params.get("model_size_or_path"),
                 device=args.model.device,
                 compute_type=args.model.compute_type,
                 num_workers=args.model.num_workers,
                 download_root=config.cache.cache_dir,
-                local_files_only=config.cache.local_files_only,
+                local_files_only=True,  # 强制本地模式，禁止自动下载
             )
             ASCIIColors.green("\nModel has been loaded\n")
         except LocalEntryNotFoundError as e:
@@ -106,29 +99,55 @@ async def load_model_task(args: Any, params: dict):
             from bookroom_audio.utils.config import get_config
             config = get_config()
             error_msg = f"""
-模型 '{model_name}' 未在本地缓存中找到。
+⚠️  Whisper 模型 '{model_name}' 未在本地缓存中找到！
 
-请按以下步骤解决：
+🔒 安全提示：本系统禁止自动下载 Whisper 模型，
+   请手动下载 OpenAI 官方版本以避免非官方版本中的广告。
 
-1. 手动下载模型到本地缓存目录：
-   git clone https://huggingface.co/openai/whisper-{model_name} {config.cache.cache_dir}/openai--whisper-{model_name}
+📥 推荐下载方式（使用阿里 ModelScope）：
+   export HF_ENDPOINT=https://www.modelscope.cn
+   huggingface-cli download openai/whisper-{model_name} --cache-dir {config.cache.cache_dir}
 
-2. 或者设置环境变量允许在线下载：
-   LOCAL_FILES_ONLY=false
+📥 备选下载方式（官方 Hugging Face）：
+   export HF_ENDPOINT=https://huggingface.co
+   huggingface-cli download openai/whisper-{model_name} --cache-dir {config.cache.cache_dir}
 
-3. 确认模型名称正确，支持的模型：
-   tiny, tiny.en, base, base.en, small, small.en, medium, medium.en, large-v1, large-v2, large-v3, large
-   distil-large-v2, distil-large-v3, distil-large-v3.5, distil-medium.en, distil-small.en, large-v3-turbo, turbo
+📁 模型下载后会自动存放在：
+   {config.cache.cache_dir}/models--openai--whisper-{model_name}
+
+✅ 支持的官方模型（请确保使用 openai/ 前缀）：
+   tiny, tiny.en, base, base.en, small, small.en,
+   medium, medium.en, large-v1, large-v2, large-v3, large
+   distil-large-v2, distil-large-v3, distil-large-v3.5
+
+❌ 不推荐的非官方模型（可能包含广告）：
+   Systran/faster-whisper-* (第三方修改版本)
+
+💡 提示：下载完成后请重启服务器或等待模型自动重载
 """
             ASCIIColors.red(f"\nModel loading failed: {error_msg}")
             raise RuntimeError(error_msg)
-    
+        except Exception as e:
+            model_name = params.get("model_size_or_path")
+            error_msg = f"""
+❌ Whisper 模型加载失败: {str(e)}
 
-    # --- 在此处标准化语言代码 ---
+💡 请确保：
+1. 模型文件已完整下载到本地缓存目录
+2. 使用的是 OpenAI 官方版本（openai/whisper-*）
+3. 模型名称正确
+
+📥 下载命令：
+   export HF_ENDPOINT=https://www.modelscope.cn
+   huggingface-cli download openai/whisper-{model_name}
+"""
+            ASCIIColors.red(f"\nModel loading failed: {error_msg}")
+            raise RuntimeError(error_msg)
+
+
     original_language = params.get("language")
     normalized_language = normalize_language_code(original_language)
     
-    # 如果标准化后的语言与原始不同，可以打印日志方便调试（可选）
     if original_language and original_language != normalized_language:
         ASCIIColors.yellow(f"Language code converted: '{original_language}' -> '{normalized_language}'")
 
@@ -136,7 +155,7 @@ async def load_model_task(args: Any, params: dict):
         model_client.transcribe,
         audio=params.get("audio"), 
         task=params.get("task"), 
-        language=normalized_language, # 使用标准化后的语言代码
+        language=normalized_language,
     )
     model_last_loaded = datetime.now()
     return result
@@ -148,27 +167,22 @@ async def cleanup_model():
     if model_client is not None:
         try:
             ASCIIColors.blue("\nCleaning up model...\n")
-            # 调用清理方法，待实现
-            # model_client.cleanup()
             model_client = None
             model_last_loaded = None
         except Exception as e:
-            ASCIIColors.red("\n Error in model cleaning up:{e}\n")
+            ASCIIColors.red(f"\nError in model cleaning up: {e}\n")
         finally:
             ASCIIColors.green("\nModel has been cleaned up\n")
 
 
 async def run_model_loaded_process(args: Any):
-    """Run the model loaded process in a background task"""
     global model_last_loaded
     while True:
         model_keep_alive = parse_keep_alive(args.model.model_keep_alive)
         try:
-            # model_keep_alive 小于0秒，直接退出循环
             if model_keep_alive < 0 or model_keep_alive is None:
-                break  # 直接退出循环
-            await asyncio.sleep(60)  # 默认每1分钟扫描一次
-            # 判定上次加载/调用模型时间是否超过model_keep_alive时间
+                break
+            await asyncio.sleep(60)
             if (
                 model_last_loaded
                 and (datetime.now() - model_last_loaded).total_seconds()
@@ -178,8 +192,7 @@ async def run_model_loaded_process(args: Any):
                 await cleanup_model()
         except asyncio.CancelledError:
             print("Task was cancelled")
-            break  # 任务被取消后退出循环
-
+            break
         except Exception as e:
             print(f"An error occurred: {e}")
-            break  # 出现错误后退出循环
+            break

@@ -3,11 +3,13 @@ TTS routes - API endpoints for text-to-speech functionality.
 """
 
 import asyncio
+import base64
 import io
+import json
 from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
-from fastapi.responses import StreamingResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 
 from bookroom_audio.utils.utils_api import (
     get_api_key_dependency,
@@ -19,24 +21,35 @@ from bookroom_audio.api.routers.tts.schemas import TTSRequest
 from bookroom_audio.api.routers.tts.constants import (
     CHATTTS_VOICES,
     CHATTTS_EMOTIONS,
+    COSYVOICE_VOICES,
     EDGE_TTS_VOICES,
 )
 from bookroom_audio.api.routers.tts.utils import select_engine
 from bookroom_audio.api.routers.tts.engines import (
     _check_chattss_available,
     _get_chattss_status,
+    _get_chattss_model,
+    _check_cosyvoice_available,
+    _get_cosyvoice_status,
+    _get_cosyvoice_model,
+    _check_cosyvoice3_available,
+    _get_cosyvoice3_status,
+    _check_kokoro_available,
+    _kokoro_status,
     generate_audio_chatt,
+    generate_audio_cosyvoice,
+    generate_audio_cosyvoice3,
     generate_audio_edge_tts,
+    generate_audio_kokoro,
     generate_audio_pyttsx3,
+    stream_tts_edge_with_words,
     EDGE_TTS_AVAILABLE,
     PYTTSX3_AVAILABLE,
 )
 
 
-router = APIRouter(prefix="/v1/tts", tags=["tts"])
-
-
 def create_tts_routes(args: Any, api_key: Optional[str] = None):
+    router = APIRouter(prefix="/v1/tts", tags=["tts"])
     """
     创建TTS路由。
     
@@ -102,6 +115,35 @@ def create_tts_routes(args: Any, api_key: Optional[str] = None):
                     volume=volume,
                     target_sample_rate=request.sample_rate,
                 )
+            elif selected_engine == "cosyvoice":
+                if not _check_cosyvoice_available():
+                    raise HTTPException(status_code=500, detail="CosyVoice2 not available. 请安装：pip install git+https://github.com/FunAudioLLM/CosyVoice.git")
+
+                voice = request.voice or request.voice_id or "中文女"
+
+                audio_data = await asyncio.to_thread(
+                    generate_audio_cosyvoice,
+                    text=request.text,
+                    voice=voice,
+                    target_sample_rate=request.sample_rate,
+                )
+            elif selected_engine == "cosyvoice3":
+                # CosyVoice3 仅 zero_shot 模式（无预置音色），必须携带参考音频。
+                # 缺少参考音频 → generate_audio_cosyvoice3 抛 ValueError → 400 显式报错，
+                # 绝不静默回退到其它引擎/模型（避免产出错误语音）。
+                if not _check_cosyvoice3_available():
+                    raise HTTPException(
+                        status_code=500,
+                        detail="CosyVoice3 not available. 请确认已下载 Fun-CosyVoice3-0.5B-2512 并配置 COSYVOICE3_MODEL_DIR",
+                    )
+
+                audio_data = await asyncio.to_thread(
+                    generate_audio_cosyvoice3,
+                    text=request.text,
+                    reference_audio=request.reference_audio,
+                    reference_text=request.reference_text,
+                    target_sample_rate=request.sample_rate,
+                )
             elif selected_engine == "pyttsx3":
                 if not PYTTSX3_AVAILABLE:
                     raise HTTPException(status_code=500, detail="pyttsx3 not available")
@@ -118,11 +160,46 @@ def create_tts_routes(args: Any, api_key: Optional[str] = None):
                     volume=volume,
                     target_sample_rate=request.sample_rate,
                 )
+            elif selected_engine == "kokoro":
+                # Kokoro-82M（Apache 2.0 可商用）：text-only 预置音色，替代 ChatTTS。
+                # 失败显式报错（500），绝不静默回退到其它引擎。
+                # return_timestamps=true 时返回字级时间戳（pred_dur 音素时长累计，viseme 口型用）
+                if not _check_kokoro_available():
+                    raise HTTPException(status_code=500, detail="Kokoro not available. 请安装：pip install kokoro")
+
+                voice = request.voice or request.voice_id or "zf_001"
+
+                if request.return_timestamps:
+                    audio_data, ts_words = await asyncio.to_thread(
+                        generate_audio_kokoro,
+                        text=request.text,
+                        voice=voice,
+                        target_sample_rate=request.sample_rate,
+                        return_timestamps=True,
+                    )
+                else:
+                    audio_data = await asyncio.to_thread(
+                        generate_audio_kokoro,
+                        text=request.text,
+                        voice=voice,
+                        target_sample_rate=request.sample_rate,
+                    )
             else:
                 raise HTTPException(status_code=400, detail=f"Unknown engine: {selected_engine}")
 
             if not audio_data:
                 raise HTTPException(status_code=500, detail="Generated audio is empty")
+
+            # Kokoro 字级时间戳模式：返回 JSON（audio base64 + words），viseme 口型驱动用
+            if request.return_timestamps and selected_engine == "kokoro":
+                return JSONResponse(
+                    {
+                        "audio": base64.b64encode(audio_data).decode("ascii"),
+                        "words": ts_words,
+                        "engine": "kokoro",
+                        "sample_rate": request.sample_rate,
+                    }
+                )
 
             filename = f"speech_{hash(request.text) % 10000}.wav"
 
@@ -177,6 +254,31 @@ def create_tts_routes(args: Any, api_key: Optional[str] = None):
             }
             result["available_engines"].append("edge-tts")
 
+        cosyvoice_status = _get_cosyvoice_status()
+        if cosyvoice_status["available"]:
+            result["cosyvoice"] = {
+                "voices": COSYVOICE_VOICES,
+                "description": cosyvoice_status["description"],
+                "features": cosyvoice_status["features"],
+                "model_loaded": cosyvoice_status["model_loaded"],
+                "model_exists": cosyvoice_status["model_exists"],
+                "model_dir": cosyvoice_status["model_dir"],
+            }
+            result["available_engines"].append("cosyvoice")
+
+        cosyvoice3_status = _get_cosyvoice3_status()
+        if cosyvoice3_status["available"]:
+            result["cosyvoice3"] = {
+                "voices": [],  # 无预置音色：zero_shot 音色克隆需携带参考音频
+                "description": cosyvoice3_status["description"],
+                "features": cosyvoice3_status["features"],
+                "model_loaded": cosyvoice3_status["model_loaded"],
+                "model_exists": cosyvoice3_status["model_exists"],
+                "model_dir": cosyvoice3_status["model_dir"],
+                "requires_reference_audio": cosyvoice3_status["requires_reference_audio"],
+            }
+            result["available_engines"].append("cosyvoice3")
+
         if PYTTSX3_AVAILABLE:
             result["pyttsx3"] = {
                 "description": "pyttsx3 - 本地离线TTS引擎",
@@ -188,6 +290,99 @@ def create_tts_routes(args: Any, api_key: Optional[str] = None):
             }
             result["available_engines"].append("pyttsx3")
 
+        kokoro_status = _kokoro_status()
+        if kokoro_status["available"]:
+            from bookroom_audio.api.routers.tts.constants import KOKORO_VOICES
+            result["kokoro"] = {
+                "voices": KOKORO_VOICES,
+                "description": kokoro_status["description"],
+                "features": kokoro_status["features"],
+                "model_loaded": kokoro_status["model_loaded"],
+                "weights_home": kokoro_status["weights_home"],
+            }
+            result["available_engines"].append("kokoro")
+
         return result
+
+    @router.post(
+        "/load",
+        dependencies=[Depends(optional_api_key)],
+        summary="Load ChatTTS model",
+        description="Manually trigger loading of the ChatTTS model. Useful if the model failed to load on startup.",
+        operation_id="load_chattss_model",
+    )
+    async def load_chattss_model():
+        try:
+            logger.info("Manual loading of ChatTTS model requested")
+            model = await asyncio.to_thread(_get_chattss_model)
+            
+            if model is not None:
+                status = _get_chattss_status()
+                return {
+                    "success": True,
+                    "message": "ChatTTS model loaded successfully",
+                    "status": status,
+                }
+            else:
+                status = _get_chattss_status()
+                return {
+                    "success": False,
+                    "message": "Failed to load ChatTTS model",
+                    "status": status,
+                }
+        except Exception as e:
+            logger.error(f"Error loading ChatTTS model: {e}", exc_info=True)
+            return {
+                "success": False,
+                "message": f"Error loading model: {str(e)}",
+            }
+
+    @router.post(
+        "/stream",
+        response_class=StreamingResponse,
+        dependencies=[Depends(optional_api_key)],
+        summary="Stream speech with word boundaries",
+        description="Edge TTS 流式生成，SSE 输出：先 words（词边界时间戳，viseme 口型驱动用），再 audio chunk（WAV base64）。",
+        operation_id="stream_tts_with_words",
+    )
+    async def stream_tts(request: TTSRequest):
+        if not request.text or not request.text.strip():
+            raise HTTPException(status_code=400, detail="No text provided")
+        if not EDGE_TTS_AVAILABLE:
+            raise HTTPException(status_code=500, detail="Edge TTS not available")
+
+        from bookroom_audio.api.routers.tts.utils import parse_rate, parse_volume
+
+        rate = parse_rate(request.rate)
+        volume = parse_volume(request.volume)
+        voice = request.voice or request.voice_id
+
+        def sse_gen():
+            try:
+                wav, words = asyncio.run(
+                    stream_tts_edge_with_words(
+                        text=request.text,
+                        voice=voice,
+                        rate=rate,
+                        volume=volume,
+                        target_sample_rate=request.sample_rate,
+                    )
+                )
+            except Exception as e:  # noqa: BLE001
+                yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
+                return
+
+            yield f"data: {json.dumps({'type': 'words', 'words': words})}\n\n"
+            chunk_size = 4096
+            for i in range(0, len(wav), chunk_size):
+                chunk = base64.b64encode(wav[i : i + chunk_size]).decode()
+                yield f"data: {json.dumps({'type': 'audio', 'chunk': chunk})}\n\n"
+            yield 'data: {"type": "end"}\n\n'
+
+        return StreamingResponse(
+            sse_gen(),
+            media_type="text/event-stream",
+            headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        )
 
     return router

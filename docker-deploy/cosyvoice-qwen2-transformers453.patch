@@ -1,0 +1,61 @@
+# CosyVoice Qwen2Encoder 补丁（transformers >= 4.53 兼容）
+#
+# 背景：transformers >= 4.53 重构了 Qwen2 前向，output_hidden_states 参数被静默吞掉，
+# 且并发增量解码（DynamicCache + use_cache）下 hidden_states 偶发返回 None，
+# 导致 CosyVoice cosyvoice/llm/llm.py:252 `outs.hidden_states[-1]` 抛
+# `TypeError: 'NoneType' object is not subscriptable`。
+#
+# 修复：改用 Qwen2Model.last_hidden_state（norm 后的最终层输出），
+# 语义与旧版 hidden_states[-1] 完全一致，数值等价（diff=0），
+# 在 transformers 4.51.x ~ 4.57.x 下均成立，并发下稳定（已实测 4 线程 0 异常）。
+#
+# 应用方式（在 CosyVoice 仓库根目录下）：
+#   patch -p1 < cosyvoice-qwen2-transformers453.patch
+# 或手动修改 cosyvoice/llm/llm.py 的 Qwen2Encoder.forward / forward_one_step。
+--- a/cosyvoice/llm/llm.py
++++ b/cosyvoice/llm/llm.py
+@@ -231,16 +231,24 @@ class Qwen2Encoder(torch.nn.Module):
+     def forward(self, xs: torch.Tensor, xs_lens: torch.Tensor):
+         T = xs.size(1)
+         masks = ~make_pad_mask(xs_lens, T)
+-        outs = self.model(
+-            inputs_embeds=xs,
+-            attention_mask=masks,
+-            output_hidden_states=True,
+-            return_dict=True,
+-        )
+-        return outs.hidden_states[-1], masks.unsqueeze(1)
++        # PATCH (transformers>=4.53 兼容)：新版 transformers 重写了 Qwen2 前向并移除了 hidden_states
++        # 收集逻辑（output_hidden_states 参数被 **kwargs 静默吞掉，CausalLMOutputWithPast.hidden_states 恒为
++        # None）。此处直接调用 Qwen2Model 取 last_hidden_state（norm 后的最终层输出），语义与旧版
++        # outs.hidden_states[-1] 完全一致，且在 transformers 4.51.x 与 4.57.x 下均成立。
++        outs = self.model.model(
++            inputs_embeds=xs,
++            attention_mask=masks,
++            use_cache=False,
++            return_dict=True,
++        )
++        return outs.last_hidden_state, masks.unsqueeze(1)
+ 
+     def forward_one_step(self, xs, masks, cache=None):
+         input_masks = masks[:, -1, :]
+-        outs = self.model(
+-            inputs_embeds=xs,
+-            attention_mask=input_masks,
+-            output_hidden_states=True,
+-            return_dict=True,
+-            use_cache=True,
+-            past_key_values=cache,
+-        )
+-        xs = outs.hidden_states[-1]
++        # PATCH (transformers>=4.53 兼容)：见上方 forward() 注释，改用 Qwen2Model.last_hidden_state。
++        outs = self.model.model(
++            inputs_embeds=xs,
++            attention_mask=input_masks,
++            use_cache=True,
++            past_key_values=cache,
++            return_dict=True,
++        )
++        xs = outs.last_hidden_state
+         new_cache = outs.past_key_values
+         return xs, new_cache

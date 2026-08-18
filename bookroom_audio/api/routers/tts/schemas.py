@@ -17,18 +17,23 @@ class TTSRequest(BaseModel):
         rate: 语速，支持整数(WPM)或百分比格式。
         volume: 音量，支持0.0-1.0浮点数或百分比格式。
         sample_rate: 音频采样率 (Hz)，可选，默认为 16000。
-        engine: TTS引擎选择，可选值: chattts, edge-tts, pyttsx3, auto。
+        engine: TTS引擎选择，可选值: chattts, cosyvoice, cosyvoice3, kokoro, edge-tts, pyttsx3, auto。
         emotion: 情感类型（仅ChatTTS支持），可选: happy, sad, angry, neutral。
+        reference_audio: （仅 cosyvoice3）参考音频 base64（WAV，3~10s 说话人样本），必填。
+        reference_text: （仅 cosyvoice3）参考音频对应文本，可选；默认官方 system prompt。
     """
 
     text: str = Field(..., description="Text content to convert to speech")
     voice_id: Optional[str] = Field(None, description="Voice ID or name (legacy parameter, use voice instead)")
-    voice: Optional[str] = Field(None, description="Voice name. For ChatTTS: use voice index (0-10). For Edge TTS: zh-CN-XiaoxiaoNeural, zh-CN-YunxiNeural, etc.")
+    voice: Optional[str] = Field(None, description="Voice name. For ChatTTS: use voice index (0-10). For CosyVoice 2: 中文女/中文男/英文女/英文男 等预置音色. For Edge TTS: zh-CN-XiaoxiaoNeural, zh-CN-YunxiNeural, etc.")
     rate: Any = Field(200, description="Speech rate. Integer (WPM) or percentage format (e.g., +10%, -20%)")
     volume: Any = Field(1.0, description="Volume level. Float between 0.0-1.0 or percentage format (e.g., 50%, 100%)")
     sample_rate: int = Field(16000, description="Audio sample rate in Hz. Common values: 16000, 22050, 44100")
-    engine: str = Field("auto", description="TTS engine. Options: chattts, edge-tts, pyttsx3, auto. Auto selects based on text language")
+    engine: str = Field("auto", description="TTS engine. Options: chattts, cosyvoice, cosyvoice3, kokoro, edge-tts, pyttsx3, auto. Auto selects based on text language")
     emotion: str = Field("neutral", description="Emotion type (ChatTTS only). Options: happy, sad, angry, neutral")
+    reference_audio: Optional[str] = Field(None, description="(cosyvoice3 only) Reference audio as base64 WAV (3-10s speaker sample), required for zero-shot cloning")
+    reference_text: Optional[str] = Field(None, description="(cosyvoice3 only) Text of the reference audio (prompt_text), optional; default official system prompt")
+    return_timestamps: bool = Field(False, description="(kokoro only) 返回字级时间戳：true 时响应为 JSON {audio(base64), words:[{text,start_ms,end_ms}]}（用于 viseme 口型驱动）；false（默认）返回纯 WAV。Kokoro 基于 pred_dur 音素时长累计，原生可得")
 
 
 class VoiceInfo(BaseModel):

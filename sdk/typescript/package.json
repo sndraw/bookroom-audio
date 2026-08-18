@@ -1,0 +1,43 @@
+{
+  "name": "@bookroom/audio-sdk",
+  "version": "0.1.0",
+  "description": "TypeScript/JavaScript client SDK for bookroom-audio streaming ASR service",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "module": "dist/index.mjs",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsup src/index.ts --format cjs,esm --dts --clean",
+    "dev": "tsup src/index.ts --format cjs,esm --dts --watch",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test --test-force-exit tests/client.test.mjs"
+  },
+  "keywords": [
+    "asr",
+    "speech-recognition",
+    "streaming",
+    "funasr",
+    "sensevoice",
+    "bookroom-audio"
+  ],
+  "license": "MIT",
+  "devDependencies": {
+    "typescript": "^5.4.0",
+    "tsup": "^8.0.0",
+    "@types/node": "^20.0.0"
+  },
+  "optionalDependencies": {
+    "ws": "^8.16.0"
+  },
+  "peerDependenciesMeta": {
+    "ws": {
+      "optional": true
+    }
+  }
+}

@@ -20,10 +20,33 @@ API_KEY=test_api_key
 TTS_ENGINE=chattts
 TTS_LANGUAGE=zh
 
+# CosyVoice 2 / 3（Apache 2.0 可商用）
+COSYVOICE_MODEL_DIR=/app/.cache/cosyvoice-ms/iic/CosyVoice2-0___5B
+COSYVOICE_ROOT=/app/.cache/CosyVoice
+COSYVOICE_FP16=0
+COSYVOICE3_MODEL_DIR=/app/.cache/cosyvoice-ms/FunAudioLLM/Fun-CosyVoice3-0___5B-2512
+
+# Kokoro-82M（Apache 2.0 可商用，text-only 预置音色，替代 ChatTTS）
+KOKORO_HF_HOME=/app/.cache/kokoro-hf
+KOKORO_HF_ENDPOINT=https://hf-mirror.com
+
 # ASR 配置
 ASR_ENGINE=qwen-asr
 ASR_MODEL=medium
 ASR_LANGUAGE=zh
+
+# 流式 ASR 配置
+STREAMING_ASR_ENGINE=funasr-local
+STREAMING_ASR_MODEL=paraformer-zh-streaming
+# 2pass 离线精确模型（FINAL 阶段整句重识别纠错 + 字级时间戳）
+STREAMING_OFFLINE_MODEL=paraformer-zh
+STREAMING_VAD_MODEL=fsmn-vad
+STREAMING_PUNC_MODEL=ct-punc
+STREAMING_SENSEVOICE_MODEL=iic/SenseVoiceSmall
+STREAMING_ENABLE_PUNC=True
+STREAMING_CHUNK_MS=600
+# 外部 FunASR 服务地址（仅 funasr-server 引擎需要，ws://host:port）
+STREAMING_FUNASR_SERVER_URL=
 
 # 通用模型配置
 DEVICE=cpu
@@ -32,10 +55,48 @@ MODEL_KEEP_ALIVE=5m
 NUM_WORKERS=4
 
 # 缓存配置
-CACHE_DIR=./.cache
+CACHE_DIR=./docker-deploy/.cache
 LOCAL_FILES_ONLY=False
-HF_ENDPOINT=https://hf-mirror.com
+HF_ENDPOINT=https://www.modelscope.cn
 ```
+
+### Docker 部署配置
+
+```bash
+# docker-deploy/.env 文件
+# 缓存配置（容器内绝对路径）
+CACHE_DIR=/app/.cache
+LOCAL_FILES_ONLY=False
+HF_ENDPOINT=https://www.modelscope.cn
+```
+
+**注意事项**：
+- Docker 容器内必须使用绝对路径（如 `/app/.cache`）
+- 不能使用相对路径（如 `./.cache`），因为容器工作目录是 `/app`
+- Volume 挂载：`./docker-deploy/.cache:/app/.cache`（宿主机相对路径:容器绝对路径）
+- 开发环境默认使用 `./docker-deploy/.cache`，与 Docker 部署共用同一缓存目录，方便模型迁移
+- FunASR/ModelScope 模型会下载到 `$CACHE_DIR/models/iic/` 子目录
+
+### Docker 构建加速配置（仅 build 时生效）
+
+`docker compose build` 时通过 `docker-deploy/.env` 注入镜像源，避免从官方源缓慢下载。这两个变量仅在构建阶段使用，不会进入运行时容器环境。
+
+| 变量 | 默认值 | 国内推荐值 | 说明 |
+|------|--------|-----------|------|
+| `APT_MIRROR` | `deb.debian.org` | `mirrors.tuna.tsinghua.edu.cn` | apt 镜像源域名，构建时替换 Debian sources |
+| `UV_INDEX_URL` | `https://pypi.org/simple` | `https://pypi.tuna.tsinghua.edu.cn/simple` | PyPI 镜像源，`uv sync` 安装 Python 包使用 |
+
+```bash
+# docker-deploy/.env 文件
+# 构建加速配置（仅 docker build 时生效）
+APT_MIRROR=mirrors.tuna.tsinghua.edu.cn
+UV_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple
+```
+
+**说明**：
+- `APT_MIRROR` 通过 `sed` 替换容器内 `/etc/apt/sources.list.d/debian.sources` 与 `/etc/apt/sources.list`，兼容 Debian trixie (DEB822) 与旧版格式
+- `UV_INDEX_URL` 通过 `ARG` 传入，仅作用于 `uv sync` 步骤
+- 默认值与官方源一致，海外构建可直接使用默认值，无需改动
 
 ### 命令行参数
 
@@ -79,8 +140,24 @@ python -m bookroom_audio.server \
 | `asr_model` | str | `"medium"` | ASR模型大小 |
 | `asr_language` | str | `"zh"` | ASR默认语言 |
 | **TTS 配置** | | | |
-| `tts_engine` | str | `"chattts"` | TTS引擎 (chattts, melotts) |
+| `tts_engine` | str | `"chattts"` | TTS引擎（服务级默认；实际由请求 `engine` 参数决定，可选 auto/chattts/cosyvoice/cosyvoice3/kokoro/edge-tts/pyttsx3） |
 | `tts_language` | str | `"zh"` | TTS默认语言 |
+| `COSYVOICE_MODEL_DIR` | str | `<cache>/cosyvoice-ms/iic/CosyVoice2-0___5B` | CosyVoice 2 模型目录（Apache 2.0 可商用） |
+| `COSYVOICE_ROOT` | str | `<cache>/CosyVoice` | CosyVoice 仓库根 |
+| `COSYVOICE_FP16` | str | `"0"` | GPU 时设 `1` 启用 FP16（CPU 自动禁用） |
+| `COSYVOICE3_MODEL_DIR` | str | `<cache>/cosyvoice-ms/FunAudioLLM/Fun-CosyVoice3-0___5B-2512` | CosyVoice 3 模型目录（zero_shot 需参考音频） |
+| `KOKORO_HF_HOME` | str | `<cache>/kokoro-hf` | Kokoro 权重 HF 缓存目录（Apache 2.0 可商用） |
+| `KOKORO_HF_ENDPOINT` | str | `https://hf-mirror.com` | Kokoro 权重下载镜像 |
+| **流式 ASR 配置** | | | |
+| `streaming_asr_engine` | str | `"funasr-local"` | 流式ASR引擎 (funasr-server, funasr-local, sensevoice-local) |
+| `streaming_asr_model` | str | `"paraformer-zh-streaming"` | FunASR 流式模型（PARTIAL 阶段） |
+| `streaming_offline_model` | str | `"paraformer-zh"` | FunASR 2pass 离线精确模型（FINAL 阶段纠错） |
+| `streaming_vad_model` | str | `"fsmn-vad"` | VAD 端点检测模型 |
+| `streaming_punc_model` | str | `"ct-punc"` | 标点恢复模型 |
+| `streaming_sensevoice_model` | str | `"iic/SenseVoiceSmall"` | SenseVoice 模型（sensevoice-local 引擎使用） |
+| `streaming_enable_punc` | bool | `true` | 是否启用标点恢复 |
+| `streaming_chunk_ms` | int | `600` | 音频分块毫秒数 |
+| `streaming_funasr_server_url` | str | `None` | 外部 FunASR 服务地址（仅 funasr-server 引擎需要，格式 ws://host:port） |
 | **通用配置** | | | |
 | `device` | str | `"cpu"` | 运行设备 (cpu, cuda) |
 | `compute_type` | str | `"int8"` | 计算类型 |
@@ -100,7 +177,7 @@ python -m bookroom_audio.server \
 | `local_files_only` | bool | `true` | 仅使用本地文件 |
 | `transformers_offline` | bool | `true` | Transformers离线模式 |
 | `hf_datasets_offline` | bool | `true` | HF数据集离线模式 |
-| `hf_endpoint` | str | `"https://hf-mirror.com"` | Hugging Face镜像 |
+| `hf_endpoint` | str | `"https://www.modelscope.cn"` | Hugging Face镜像 |
 | `model_source` | str | `"huggingface"` | 模型源 |
 
 ## 使用示例
@@ -142,7 +219,7 @@ export CACHE_DIR=/path/to/cache
 export LOCAL_FILES_ONLY=true
 
 # 设置Hugging Face镜像
-export HF_ENDPOINT=https://hf-mirror.com
+export HF_ENDPOINT=https://www.modelscope.cn
 ```
 
 ## 离线模式
@@ -222,7 +299,7 @@ python -m bookroom_audio.server --cache-dir /custom/cache/path
   - Local Files Only: True
   - Transformers Offline: True
   - HF Datasets Offline: True
-  - HF Endpoint: https://hf-mirror.com
+  - HF Endpoint: https://www.modelscope.cn
   - Model Source: huggingface
 ============================================================
 ```

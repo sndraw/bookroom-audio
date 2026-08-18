@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>bookroom-audio 流式 ASR Demo</title>
+  <link rel="stylesheet" href="/src/styles.css" />
+</head>
+<body>
+  <div class="app">
+    <header class="app__header">
+      <h1>bookroom-audio 流式语音识别</h1>
+      <div class="app__status">
+        状态：<span id="state-badge" class="state-badge state-badge--idle">idle</span>
+        <span id="engine-info" class="engine-info"></span>
+        <span id="rtt-info" class="rtt-info"></span>
+      </div>
+    </header>
+
+    <main class="app__main">
+      <!-- 连接配置 -->
+      <section class="card">
+        <h2 class="card__title">连接配置</h2>
+        <div class="grid grid--2">
+          <div class="form-row">
+            <label for="url">服务端 WebSocket URL</label>
+            <input id="url" type="text" autocomplete="off" />
+          </div>
+          <div class="form-row">
+            <label for="apiKey">API Key（未配置鉴权可留空）</label>
+            <input id="apiKey" type="password" autocomplete="off" />
+          </div>
+          <div class="form-row">
+            <label for="mode">协议模式</label>
+            <select id="mode">
+              <option value="native">native（推荐，支持暂停/恢复/心跳/重连）</option>
+              <option value="funasr">funasr（兼容 FunASR 官方客户端）</option>
+            </select>
+          </div>
+          <div class="form-row">
+            <label for="engine">ASR 引擎（仅 native 模式可选）</label>
+            <select id="engine">
+              <option value="funasr-local">funasr-local（Paraformer 流式 + 2pass 离线纠错）</option>
+              <option value="sensevoice-local">sensevoice-local（SenseVoice + VAD 伪流式）</option>
+            </select>
+          </div>
+          <div class="form-row">
+            <label for="chunkSize">chunk_size（流式分块，单位 60ms）</label>
+            <select id="chunkSize">
+              <option value="5,10,5">[5,10,5] 默认（600ms 块，300ms 前瞻）</option>
+              <option value="5,12,5">[5,12,5] 720ms 块（更稳，延迟略高）</option>
+              <option value="1,10,1">[1,10,1] 600ms 块（最小回溯，最快响应）</option>
+              <option value="5,20,5">[5,20,5] 1200ms 块（长句优化）</option>
+            </select>
+          </div>
+          <div class="form-row">
+            <label for="silence">VAD 静音断句阈值（毫秒）</label>
+            <select id="silence">
+              <option value="800">800ms（短句优先，频繁断句）</option>
+              <option value="1300" selected>1300ms 默认</option>
+              <option value="2000">2000ms（长句优先）</option>
+              <option value="3000">3000ms（演讲场景）</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-row">
+          <label for="hotwords">热词（每行格式：词:权重，权重 1-100，仅 funasr-local/sensevoice-local 支持）</label>
+          <textarea id="hotwords" rows="3" placeholder="bookroom:20&#10;实时语音识别:15"></textarea>
+        </div>
+      </section>
+
+      <!-- 控制按钮 -->
+      <section class="card">
+        <div class="controls">
+          <button id="btn-start" class="btn btn--primary">开始识别</button>
+          <button id="btn-stop" class="btn btn--danger" disabled>停止</button>
+          <button id="btn-pause" class="btn btn--warn" disabled>暂停</button>
+          <button id="btn-resume" class="btn btn--success" disabled>恢复</button>
+          <button id="btn-clear" class="btn btn--ghost">清空</button>
+        </div>
+      </section>
+
+      <!-- 识别结果 -->
+      <section class="card">
+        <h2 class="card__title">识别结果</h2>
+        <div class="result-block">
+          <div class="result-block__label">实时（PARTIAL）</div>
+          <div id="partial" class="result-block__content result-block__content--partial">（等待识别...）</div>
+        </div>
+        <div class="result-block">
+          <div class="result-block__label">最终（FINAL）<span id="final-count" class="result-block__count">0</span></div>
+          <div id="final-list" class="result-block__content result-block__content--final"></div>
+        </div>
+      </section>
+
+      <!-- 日志 -->
+      <section class="card">
+        <h2 class="card__title">
+          事件日志
+          <label class="card__toggle">
+            <input id="log-audio" type="checkbox" /> 显示音频帧日志
+          </label>
+        </h2>
+        <div id="log" class="log"></div>
+      </section>
+    </main>
+
+    <footer class="app__footer">
+      <span>bookroom-audio 流式 ASR Demo · </span>
+      <a href="https://github.com/sndraw/bookroom-audio" target="_blank" rel="noopener">文档</a>
+      <span> · </span>
+      <a href="/docs" target="_blank">API 文档</a>
+    </footer>
+  </div>
+
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>

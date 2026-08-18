@@ -21,6 +21,7 @@ from bookroom_audio.api.routers.tts.utils import (
     get_default_edge_voice,
     parse_rate,
     parse_volume,
+    preprocess_text_for_chattts,
     select_engine,
 )
 from bookroom_audio.api.routers.tts.engines import (
@@ -50,6 +51,7 @@ __all__ = [
     "get_default_edge_voice",
     "parse_rate",
     "parse_volume",
+    "preprocess_text_for_chattts",
     "select_engine",
     
     # Engines

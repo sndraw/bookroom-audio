@@ -1,7 +1,7 @@
 [project]
 name = "bookroom-audio"
-version = "0.0.5"
-description = "API for translating audio to text using a speech recognition model."
+version = "0.0.7"
+description = "API for audio transcription, text-to-speech, and video content analysis using AI models."
 readme = "README.md"
 requires-python = ">=3.11"
 authors = [
@@ -11,12 +11,20 @@ authors = [
 dependencies = [
     "argparse>=1.4.0",
     "ascii-colors>=0.5.2",
+    # CosyVoice 2（Apache 2.0 可商用，本地离线）需从 git 安装（PyPI 无官方包）：
+    #   pip install git+https://github.com/FunAudioLLM/CosyVoice.git
+    # 并下载模型：git clone https://www.modelscope.cn/iic/CosyVoice2-0.5B.git <COSYVOICE_MODEL_DIR>
+    # 见 MODEL_DOWNLOAD.md §CosyVoice 2 模型下载
     "chattts>=0.0.9",
     "dotenv>=0.9.9",
     "edge-tts>=6.1.9",
     "einx>=0.4.3",
     "fastapi>=0.115.11",
     "faster-whisper>=1.1.1",
+    "funasr>=1.1.20",
+    # Kokoro-82M（hexgrad，Apache 2.0 可商用）：text-only 预置音色，替代不可商用的 ChatTTS。
+    # 依赖 misaki（G2P，需系统 espeak-ng，Dockerfile 已装）；权重走 HF 缓存 .cache/kokoro-hf
+    "kokoro>=0.9.0",
     "openai-whisper>=20240930",
     "pydub>=0.25.1",
     "python-multipart>=0.0.20",
@@ -27,6 +35,11 @@ dependencies = [
     "torchvision>=0.21.0",
     "uvicorn>=0.34.0",
     "vector-quantize-pytorch>=1.29.1",
+    "websockets>=12.0",
+    "transformers>=4.45.0",  # 注：保持与 qwen-asr==0.0.6 钉死的 transformers==4.57.6 兼容；CosyVoice 兼容性改由源码补丁解决（见 docker-deploy/.cache/CosyVoice）
+    "accelerate>=0.34.0",
+    "pillow>=10.0.0",
+    "modelscope>=1.37.1",
 ]
 
 [tool.setuptools.packages.find]

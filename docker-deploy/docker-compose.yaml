@@ -1,30 +1,83 @@
+# bookroom-audio 独立部署（与 bookroom-ai/docker-deploy 分离，避免 project 名冲突）
+name: bookroom-audio
+
 services:
   audio:
-    image: sndraw/bookroom-audio:latest
+    image: bookroom-audio:latest
+    container_name: bookroom-audio
+    build:
+      context: ..
+      args:
+        # APT 镜像源域名（构建时替换 deb.debian.org，国内环境配置为 mirrors.tuna.tsinghua.edu.cn 等加速）
+        APT_MIRROR: ${APT_MIRROR:-deb.debian.org}
+        # PyPI 镜像源（构建时 uv sync 使用，国内环境配置为 https://pypi.tuna.tsinghua.edu.cn/simple 等加速）
+        UV_INDEX_URL: ${UV_INDEX_URL:-https://pypi.org/simple}
     restart: unless-stopped
     volumes:
-      - ./volumes/bookroom-audio/.cache:/app/.cache
+      - ./.cache:/app/.cache
+      # 开发挂载：源码热更新（改代码后 docker compose restart audio 生效）
+      - ../bookroom_audio:/app/bookroom_audio
     environment:
       TZ: ${TZ:-Asia/Shanghai}
       API_KEY: ${API_KEY:-your_api_key_here}
-      
+
+      # =============================================================
+      # CPU 兼容性配置（关键：解决 "Illegal instruction" 崩溃）
+      # 在老旧 CPU / 部分虚拟化 / 不支持 AVX2 的机器上运行时必须开启。
+      # 如需恢复使用 AVX2 以获得更好性能，设为 0 即可。
+      # =============================================================
+      PYTORCH_DISABLE_AVX2: ${PYTORCH_DISABLE_AVX2:-1}
+      PYTORCH_DISABLE_AVX512_F: ${PYTORCH_DISABLE_AVX512_F:-1}
+      MAX_ISA: ${MAX_ISA:-SSE4}
+      CTRANSLATE2_DISABLE_AVX2: ${CTRANSLATE2_DISABLE_AVX2:-1}
+
       # TTS 配置
       TTS_ENGINE: ${TTS_ENGINE:-chattts}
       TTS_LANGUAGE: ${TTS_LANGUAGE:-zh}
-      
+
+      # CosyVoice 2 配置（本地离线、Apache 2.0 可商用；仓库+模型经 .cache 卷挂载到 /app/.cache）
+      COSYVOICE_MODEL_DIR: ${COSYVOICE_MODEL_DIR:-/app/.cache/cosyvoice-ms/iic/CosyVoice2-0___5B}
+      COSYVOICE_ROOT: ${COSYVOICE_ROOT:-/app/.cache/CosyVoice}
+      COSYVOICE_FP16: ${COSYVOICE_FP16:-0}
+
+      # CosyVoice 3 配置（Fun-CosyVoice3-0.5B-2512；引擎 cosyvoice3，zero_shot 音色克隆需携带参考音频，
+      # 无预置音色；模型包 ~5GB，未下载时该引擎不可用并显式报错，不会回退到其它引擎）
+      COSYVOICE3_MODEL_DIR: ${COSYVOICE3_MODEL_DIR:-/app/.cache/cosyvoice-ms/FunAudioLLM/Fun-CosyVoice3-0___5B-2512}
+
+      # Kokoro-82M 配置（Apache 2.0 可商用 TTS，text-only 预置音色，替代不可商用的 ChatTTS）
+      # 权重 HF 缓存目录（.cache/kokoro-hf 随卷挂载；未下载时经 KOKORO_HF_ENDPOINT 镜像自动下载）
+      KOKORO_HF_HOME: ${KOKORO_HF_HOME:-/app/.cache/kokoro-hf}
+      KOKORO_HF_ENDPOINT: ${KOKORO_HF_ENDPOINT:-https://hf-mirror.com}
+
       # ASR 配置
       ASR_ENGINE: ${ASR_ENGINE:-qwen-asr}
       ASR_MODEL: ${ASR_MODEL:-medium}
       ASR_LANGUAGE: ${ASR_LANGUAGE:-zh}
-      
+
+      # 流式 ASR 配置（实时语音识别）
+      STREAMING_ASR_ENGINE: ${STREAMING_ASR_ENGINE:-funasr-local}
+      STREAMING_ASR_MODEL: ${STREAMING_ASR_MODEL:-paraformer-zh-streaming}
+      STREAMING_OFFLINE_MODEL: ${STREAMING_OFFLINE_MODEL:-paraformer-zh}
+      STREAMING_VAD_MODEL: ${STREAMING_VAD_MODEL:-fsmn-vad}
+      STREAMING_PUNC_MODEL: ${STREAMING_PUNC_MODEL:-ct-punc}
+      STREAMING_SENSEVOICE_MODEL: ${STREAMING_SENSEVOICE_MODEL:-iic/SenseVoiceSmall}
+      STREAMING_ENABLE_PUNC: ${STREAMING_ENABLE_PUNC:-true}
+      STREAMING_CHUNK_MS: ${STREAMING_CHUNK_MS:-600}
+      STREAMING_FUNASR_SERVER_URL: ${STREAMING_FUNASR_SERVER_URL:-}
+
+      # VL (Vision-Language) 配置
+      VL_MODEL: ${VL_MODEL:-medium}
+      VL_FRAME_INTERVAL: ${VL_FRAME_INTERVAL:-10}
+
       # 通用配置
       DEVICE: ${DEVICE:-auto}
       COMPUTE_TYPE: ${COMPUTE_TYPE:-float16}
       MODEL_KEEP_ALIVE: ${MODEL_KEEP_ALIVE:-5m}
       NUM_WORKERS: ${NUM_WORKERS:-2}
-      CACHE_DIR: ${CACHE_DIR:-./.cache}
-      LOCAL_FILES_ONLY: ${LOCAL_FILES_ONLY:-true}
-      HF_ENDPOINT: ${HF_ENDPOINT:-https://hf-mirror.com}
+      CACHE_DIR: ${CACHE_DIR:-/app/.cache}
+      LOCAL_FILES_ONLY: ${LOCAL_FILES_ONLY:-false}
+      HF_ENDPOINT: ${HF_ENDPOINT:-https://www.modelscope.cn}
+      MODELSCOPE_ENDPOINT: ${MODELSCOPE_ENDPOINT:-https://www.modelscope.cn}
     ports:
       - "${EXPOSE_PORT:-15231}:${PORT:-15231}"
     networks:
@@ -38,8 +91,12 @@ services:
         reservations:
           memory: 4G
           cpus: '2.0'
+      # GPU 加速不在默认配置中（兼容本机/无 GPU 环境）：
+      # 有 NVIDIA GPU 的机器（如 H20）请追加 GPU override 启动：
+      #   docker compose -f docker-compose.yaml -f docker-compose.gpu.yaml up -d
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:${PORT:-15231}/health"]
+      # 容器内未安装 curl/wget，使用 python urllib 做健康检查（python 必然存在）
+      test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://localhost:${PORT:-15231}/health')"]
       interval: 30s
       timeout: 10s
       retries: 3

@@ -41,12 +41,18 @@ log/
 
 # Cache
 .cache/
+**/.cache
 .mypy_cache
 .pytest_cache
 .ruff_cache
 .gradio
 .logfire
 temp/
+
+# Docker 部署目录下的模型缓存与 SDK/文档（运行时不需要打包进镜像）
+docker-deploy/.cache
+sdk/
+docs/
 
 # MacOS-related files
 .DS_Store
