@@ -1015,12 +1015,67 @@ def _kokoro_lang_from_voice(voice: str) -> str:
     return v[0] if len(v) >= 2 else "z"
 
 
+def _kokoro_timestamps(phonemes: str, pred_dur, sample_rate: int = 24000) -> list:
+    """Kokoro pred_dur（每音素帧数）→ 词级时间戳（毫秒）。
+
+    对齐官方 KPipeline.join_timestamps 的数学（半帧计数，MAGIC_DIVISOR=80，1 pred_dur 帧=600
+    采样点@24kHz）：pred_dur = [<bos>, ...逐字符对应 phonemes(含空格)..., <eos>]，
+    len(pred_dur) == len(phonemes) + 2。空格"半切"：前半归前词尾、后半给后词头。
+    无 tokens（中文 misaki）时按 phonemes 逐字符聚合，输出 [{text, start_ms, end_ms}]。
+
+    Args:
+        phonemes: Kokoro 音素字符串（Result.phonemes）
+        pred_dur: 音素时长帧数（Result.pred_dur，torch.LongTensor / ndarray / list）
+        sample_rate: Kokoro 输出采样率（24000，pred_dur 帧单位即 1/600s）
+
+    Returns:
+        词级时间戳列表：[{"text": str, "start_ms": float, "end_ms": float}, ...]
+    """
+    import numpy as np
+
+    pd = np.asarray(pred_dur, dtype=np.float64)
+    if len(pd) < 3:  # 至少 <bos>, 一个音素, <eos>
+        return []
+
+    DIV = 80.0  # 半帧/秒（1 pred_dur 帧 = 600 samples @24kHz = 2 half-frames）
+    words = []
+    # 半帧游标：left=词起点，right=词尾（含空格半切），初始对齐官方 bos 偏移
+    left = right = 2.0 * max(0.0, pd[0] - 3.0)
+    i = 1
+    cur = None
+    for ch in phonemes:
+        if i >= len(pd) - 1:  # 保留最后一个 <eos>
+            break
+        if ch == " ":
+            if cur is not None:
+                cur["end_ms"] = round((left / DIV) * 1000.0, 2)
+                words.append(cur)
+                cur = None
+            # 空格半切：前半已计入前词 end（left），后半作为后词起点
+            left = right + pd[i]
+            right = left + pd[i]
+            i += 1
+            continue
+        if cur is None:
+            cur = {"text": ch, "start_ms": round((right / DIV) * 1000.0, 2), "end_ms": 0.0}
+        else:
+            cur["text"] += ch
+        left = right + 2.0 * pd[i]
+        right = left
+        cur["end_ms"] = round((left / DIV) * 1000.0, 2)
+        i += 1
+    if cur is not None:
+        words.append(cur)
+    return words
+
+
 def generate_audio_kokoro(
     text: str,
     voice: Optional[str] = None,
     target_sample_rate: int = 16000,
     emotion: str = "neutral",
-) -> bytes:
+    return_timestamps: bool = False,
+):
     """
     使用 Kokoro 生成音频（text-only 预置音色，Apache 2.0 可商用）。
 
@@ -1031,9 +1086,13 @@ def generate_audio_kokoro(
                默认中文女声 zf_001。
         target_sample_rate: 目标采样率
         emotion: 保留参数
+        return_timestamps: True 时返回 (wav_bytes, words)——words 为字级时间戳
+               [{text, start_ms, end_ms}]（毫秒，对齐 24kHz 原始音频；重采样后时长不变仍有效），
+               来自模型原生 pred_dur 音素时长累计，用于 viseme 口型驱动；False（默认）返回 bytes。
 
     Returns:
-        WAV 格式音频数据
+        return_timestamps=False: WAV 格式音频数据
+        return_timestamps=True: (WAV bytes, words list)
 
     Raises:
         Exception: 模型未加载 / 无输出 / 音色不存在（显式报错，不兜底）
@@ -1046,9 +1105,20 @@ def generate_audio_kokoro(
     pipeline = _get_kokoro_pipeline(lang_code)  # 失败向上抛（路由层转 500）
 
     chunks = []
+    words = []
     sample_rate = 24000
+    audio_offset_ms = 0.0
     for result in pipeline(text, voice=voice, speed=1.0):
         chunks.append(result.audio)
+        if return_timestamps:
+            pred_dur = getattr(result, "pred_dur", None)
+            phonemes = getattr(result, "phonemes", None)
+            if pred_dur is not None and phonemes:
+                for w in _kokoro_timestamps(phonemes, pred_dur, sample_rate):
+                    w["start_ms"] = round(w["start_ms"] + audio_offset_ms, 2)
+                    w["end_ms"] = round(w["end_ms"] + audio_offset_ms, 2)
+                    words.append(w)
+        audio_offset_ms += (len(result.audio) / sample_rate) * 1000.0
 
     if not chunks:
         raise Exception("Kokoro generated no audio chunks")
@@ -1066,4 +1136,6 @@ def generate_audio_kokoro(
 
     out_buf = io.BytesIO()
     audio.export(out_buf, format="wav")
+    if return_timestamps:
+        return out_buf.getvalue(), words
     return out_buf.getvalue()

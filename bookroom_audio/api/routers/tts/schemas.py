@@ -33,6 +33,7 @@ class TTSRequest(BaseModel):
     emotion: str = Field("neutral", description="Emotion type (ChatTTS only). Options: happy, sad, angry, neutral")
     reference_audio: Optional[str] = Field(None, description="(cosyvoice3 only) Reference audio as base64 WAV (3-10s speaker sample), required for zero-shot cloning")
     reference_text: Optional[str] = Field(None, description="(cosyvoice3 only) Text of the reference audio (prompt_text), optional; default official system prompt")
+    return_timestamps: bool = Field(False, description="(kokoro only) 返回字级时间戳：true 时响应为 JSON {audio(base64), words:[{text,start_ms,end_ms}]}（用于 viseme 口型驱动）；false（默认）返回纯 WAV。Kokoro 基于 pred_dur 音素时长累计，原生可得")
 
 
 class VoiceInfo(BaseModel):

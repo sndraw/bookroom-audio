@@ -54,7 +54,7 @@ const response = await fetch('http://localhost:15231/v1/tts/generate', {
 
 ### 🔊 语音合成 (TTS)
 - **CosyVoice 2 / 3** - 阿里 FunAudioLLM（Apache 2.0 可商用），中文韵律开源第一梯队；CosyVoice3 支持 zero_shot 音色克隆（需参考音频）
-- **Kokoro-82M** - hexgrad（Apache 2.0 可商用），text-only 预置音色，82M 极轻量 CPU 可跑，中文 v1.1-zh 优化版
+- **Kokoro-82M** - hexgrad（Apache 2.0 可商用），text-only 预置音色，82M 极轻量 CPU 可跑，中文 v1.1-zh 优化版；**支持 `return_timestamps` 字级时间戳**（模型原生 `pred_dur` 音素时长），可驱动数智人 viseme 口型（见 docs/INTEGRATION.md §TTS 合成）
 - **ChatTTS** - 支持中文语音合成，支持多种情感和音色（**不可商用**，仅作 auto 模式最终兜底）
 - **MeloTTS** - 支持中文、英文、日文等多种语言
 - **Edge TTS** - 微软在线 TTS（需网络）

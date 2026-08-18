@@ -105,6 +105,48 @@ GET /v1/audio/streaming/engines
 
 返回当前服务端可用的流式 ASR 引擎列表，用于客户端选择。
 
+### TTS 合成（含字级时间戳，viseme 口型驱动）
+
+```
+POST /v1/tts/generate
+Content-Type: application/json
+Authorization: Bearer <API_KEY>   # 可选
+```
+
+请求体（完整字段见 Swagger `/docs`；常用）：
+
+```json
+{
+  "text": "你好，欢迎光临",
+  "engine": "kokoro",
+  "voice": "zf_001",
+  "sample_rate": 16000,
+  "return_timestamps": true
+}
+```
+
+- `engine`：`auto`（中文回退链 cosyvoice→kokoro→chattts）/ `cosyvoice` / `cosyvoice3` / `kokoro` / `chattts` / `pyttsx3` / `edge-tts`（在线，不建议生产）
+- `voice`：CosyVoice 2 用「中文女/中文男…」；Kokoro 中文用 `zf_001~zf_099`（女）/ `zm_009~zm_100`（男），英文用 `af_maple` 等
+- `cosyvoice3` 仅 zero_shot 模式：需 `reference_audio`（base64 WAV，3~10s 说话人样本），缺参显式报错不回退
+- **`return_timestamps`（仅 kokoro 生效）**：`true` 时响应为 JSON——`audio`（base64 WAV）+ `words`（字级时间戳，来自模型原生 `pred_dur` 音素时长累计），供数智人 viseme 口型驱动；`false`（默认）返回纯 WAV，其他引擎忽略此字段，向后兼容
+
+`return_timestamps=true` 响应示例：
+
+```json
+{
+  "audio": "<base64 WAV>",
+  "words": [
+    {"text": "ni3", "start_ms": 175.0, "end_ms": 612.5},
+    {"text": "hao3", "start_ms": 650.0, "end_ms": 1040.0}
+  ],
+  "engine": "kokoro",
+  "sample_rate": 16000
+}
+```
+
+> `words[].text` 为音素片段（拼音音节 / IPA 音素串），前端按音素→viseme 映射驱动 3D 口型；
+> 时间戳为毫秒，对齐 24kHz 原始音频（重采样后时长不变仍有效）。
+
 ## 引擎选择
 
 | 引擎 | 模式 | 特点 |

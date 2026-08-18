@@ -9,7 +9,7 @@ import json
 from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
-from fastapi.responses import StreamingResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 
 from bookroom_audio.utils.utils_api import (
     get_api_key_dependency,
@@ -163,22 +163,43 @@ def create_tts_routes(args: Any, api_key: Optional[str] = None):
             elif selected_engine == "kokoro":
                 # Kokoro-82M（Apache 2.0 可商用）：text-only 预置音色，替代 ChatTTS。
                 # 失败显式报错（500），绝不静默回退到其它引擎。
+                # return_timestamps=true 时返回字级时间戳（pred_dur 音素时长累计，viseme 口型用）
                 if not _check_kokoro_available():
                     raise HTTPException(status_code=500, detail="Kokoro not available. 请安装：pip install kokoro")
 
                 voice = request.voice or request.voice_id or "zf_001"
 
-                audio_data = await asyncio.to_thread(
-                    generate_audio_kokoro,
-                    text=request.text,
-                    voice=voice,
-                    target_sample_rate=request.sample_rate,
-                )
+                if request.return_timestamps:
+                    audio_data, ts_words = await asyncio.to_thread(
+                        generate_audio_kokoro,
+                        text=request.text,
+                        voice=voice,
+                        target_sample_rate=request.sample_rate,
+                        return_timestamps=True,
+                    )
+                else:
+                    audio_data = await asyncio.to_thread(
+                        generate_audio_kokoro,
+                        text=request.text,
+                        voice=voice,
+                        target_sample_rate=request.sample_rate,
+                    )
             else:
                 raise HTTPException(status_code=400, detail=f"Unknown engine: {selected_engine}")
 
             if not audio_data:
                 raise HTTPException(status_code=500, detail="Generated audio is empty")
+
+            # Kokoro 字级时间戳模式：返回 JSON（audio base64 + words），viseme 口型驱动用
+            if request.return_timestamps and selected_engine == "kokoro":
+                return JSONResponse(
+                    {
+                        "audio": base64.b64encode(audio_data).decode("ascii"),
+                        "words": ts_words,
+                        "engine": "kokoro",
+                        "sample_rate": request.sample_rate,
+                    }
+                )
 
             filename = f"speech_{hash(request.text) % 10000}.wav"
 
