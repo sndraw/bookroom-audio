@@ -67,6 +67,12 @@ RUN uv pip install --python /app/.venv/bin/python \
       pyarrow grpcio grpcio-tools protobuf tensorboard \
     && uv pip install --python /app/.venv/bin/python --no-deps --index-url https://pypi.org/simple matcha-tts
 
+# Kokoro 权重缓存软链：huggingface_hub 0.36+ 的 HF_HOME 在 import 时固化为 /root/.cache/huggingface，
+# 服务启动时其他模型模块已先 import huggingface_hub（无 HF_HOME env）→ 代码里设环境变量无效；
+# 故把 .cache 卷中的 kokoro-hf/hub 软链到默认 HF 缓存根（卷运行时挂载，软链自动生效）
+RUN mkdir -p /root/.cache/huggingface \
+    && ln -sfn /app/.cache/kokoro-hf/hub /root/.cache/huggingface/hub
+
 EXPOSE 15231
 
 ENTRYPOINT [ "/bin/bash","/entrypoint.sh" ]

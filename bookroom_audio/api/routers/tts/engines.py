@@ -983,6 +983,9 @@ def _get_kokoro_pipeline(lang_code: str):
                         repo_id=_kokoro_repo_id(lang_code),
                     )
                     logger.info(f"Kokoro pipeline loaded (lang={lang_code})")
+                except Exception:
+                    logger.exception(f"Kokoro pipeline load failed (lang={lang_code})")
+                    raise
                 finally:
                     for k, v in saved.items():
                         if v is None:
