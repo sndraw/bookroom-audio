@@ -78,6 +78,9 @@ services:
       LOCAL_FILES_ONLY: ${LOCAL_FILES_ONLY:-false}
       HF_ENDPOINT: ${HF_ENDPOINT:-https://www.modelscope.cn}
       MODELSCOPE_ENDPOINT: ${MODELSCOPE_ENDPOINT:-https://www.modelscope.cn}
+      # 离线优先：模型权重经 .cache 卷预下载；禁用 HF 联网（无外网容器避免 Hub 定位失败，
+      # Kokoro 等权重需预先用 HF_ENDPOINT 镜像下载到 docker-deploy/.cache/kokoro-hf）
+      HF_HUB_OFFLINE: ${HF_HUB_OFFLINE:-1}
     ports:
       - "${EXPOSE_PORT:-15231}:${PORT:-15231}"
     networks:
