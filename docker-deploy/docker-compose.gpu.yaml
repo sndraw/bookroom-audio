@@ -1,0 +1,19 @@
+# GPU override —— 追加启用 NVIDIA GPU 加速（NVIDIA Container Toolkit）
+#
+# 使用方式（有 NVIDIA GPU 的机器，如 H20/TencentOS）：
+#   docker compose -f docker-compose.yaml -f docker-compose.gpu.yaml up -d
+#
+# 前提：
+#   - 宿主机已安装 nvidia-container-toolkit（https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/）
+#   - docker 使用 nvidia runtime
+#
+# 效果：CosyVoice 2/3 推理从 CPU（rtf 10~25）降至 GPU（rtf ~0.1）。
+services:
+  audio:
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]

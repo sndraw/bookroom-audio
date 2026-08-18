@@ -91,14 +91,9 @@ services:
         reservations:
           memory: 4G
           cpus: '2.0'
-          # GPU 加速（NVIDIA Container Toolkit）：
-          # - 宿主机需已安装 nvidia-container-toolkit 且 docker 使用 nvidia runtime
-          # - count: all 使用全部 GPU；可改为具体数量（如 count: 1）
-          # - 启用后 rtf 从 10~25（CPU）降至 ~0.1，CosyVoice 方可实际可用
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: [gpu]
+      # GPU 加速不在默认配置中（兼容本机/无 GPU 环境）：
+      # 有 NVIDIA GPU 的机器（如 H20）请追加 GPU override 启动：
+      #   docker compose -f docker-compose.yaml -f docker-compose.gpu.yaml up -d
     healthcheck:
       # 容器内未安装 curl/wget，使用 python urllib 做健康检查（python 必然存在）
       test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://localhost:${PORT:-15231}/health')"]
